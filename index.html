@@ -60462,3 +60462,6511 @@ drawGameOver();
 
 
 }
+    //=========================
+// GUILD SYSTEM
+//=========================
+
+const Guild={
+
+    joined:false,
+
+    name:"",
+
+    level:1,
+
+    exp:0,
+
+    nextExp:1000,
+
+    gold:0,
+
+    members:[],
+
+    skills:{
+
+        atk:0,
+
+        hp:0,
+
+        exp:0
+
+    },
+
+    create(name){
+
+        this.joined=true;
+        this.name=name;
+
+        this.members=[
+            {
+                name:"Player",
+                rank:"Leader",
+                online:true
+            }
+        ];
+
+    },
+
+    donateGold(amount){
+
+        if(Player.gold<amount)return;
+
+        Player.gold-=amount;
+
+        this.gold+=amount;
+
+        this.exp+=amount;
+
+        while(this.exp>=this.nextExp){
+
+            this.exp-=this.nextExp;
+
+            this.level++;
+
+            this.nextExp=Math.floor(this.nextExp*1.4);
+
+            this.skills.atk++;
+
+            this.skills.hp++;
+
+        }
+
+    }
+
+};
+
+//=========================
+// GUILD BONUS
+//=========================
+
+function updateGuildBonus(){
+
+    if(!Guild.joined)return;
+
+    Player.attack=
+
+        15+
+
+        (Equipment.weapon?Equipment.weapon.attack:0)+
+
+        Guild.skills.atk*2;
+
+    Player.maxHp=
+
+        100+
+
+        Guild.skills.hp*25;
+
+}
+
+//=========================
+// GUILD WINDOW
+//=========================
+
+Guild.open=false;
+
+window.addEventListener("keydown",e=>{
+
+    if(e.key.toLowerCase()=="g"){
+
+        Guild.open=!Guild.open;
+
+    }
+
+});
+
+function drawGuild(){
+
+    if(!Guild.open)return;
+
+    ctx.fillStyle="rgba(0,0,0,.90)";
+    ctx.fillRect(140,60,640,520);
+
+    ctx.strokeStyle="gold";
+    ctx.lineWidth=3;
+    ctx.strokeRect(140,60,640,520);
+
+    ctx.fillStyle="gold";
+    ctx.font="30px Arial";
+    ctx.fillText("GUILD",170,100);
+
+    if(!Guild.joined){
+
+        ctx.fillStyle="white";
+        ctx.font="20px Arial";
+        ctx.fillText("Press J to create guild.",170,160);
+
+        return;
+    }
+
+    ctx.fillStyle="white";
+    ctx.font="20px Arial";
+
+    ctx.fillText("Guild : "+Guild.name,170,150);
+    ctx.fillText("Level : "+Guild.level,170,185);
+    ctx.fillText("Guild EXP : "+Guild.exp+" / "+Guild.nextExp,170,220);
+    ctx.fillText("Guild Gold : "+Guild.gold,170,255);
+
+    ctx.fillStyle="#66ff66";
+    ctx.fillText("ATK Bonus : +"+Guild.skills.atk*2,170,310);
+
+    ctx.fillText("HP Bonus : +"+Guild.skills.hp*25,170,340);
+
+    ctx.fillStyle="yellow";
+    ctx.fillText("Members",430,140);
+
+    let y=180;
+
+    for(const m of Guild.members){
+
+        ctx.fillStyle=
+            m.online
+            ?"lime"
+            :"gray";
+
+        ctx.fillText(
+
+            m.name+
+            " - "+
+            m.rank,
+
+            430,
+            y
+
+        );
+
+        y+=35;
+
+    }
+
+}
+
+//=========================
+// CREATE GUILD
+//=========================
+
+window.addEventListener("keydown",e=>{
+
+    if(e.key.toLowerCase()=="j"){
+
+        if(!Guild.joined){
+
+            Guild.create("Wind Heroes");
+
+        }
+
+    }
+
+});
+
+//=========================
+// DONATE GOLD
+//=========================
+
+window.addEventListener("keydown",e=>{
+
+    if(e.key.toLowerCase()=="h"){
+
+        if(Guild.joined){
+
+            Guild.donateGold(100);
+
+        }
+
+    }
+
+});
+
+//=========================
+// NPC GUILD
+//=========================
+
+NPCs.push(
+
+    new NPC(
+
+        900,
+
+        600,
+
+        "Guild Master",
+
+        "Create a Guild and conquer the world."
+
+    )
+
+);
+
+//=========================
+// RANDOM MEMBERS
+//=========================
+
+function guildRecruitNPC(){
+
+    if(!Guild.joined)return;
+
+    if(Guild.members.length>=20)return;
+
+    if(Math.random()<0.001){
+
+        Guild.members.push({
+
+            name:
+            "Hero"+
+            Math.floor(Math.random()*9999),
+
+            rank:"Member",
+
+            online:Math.random()<0.8
+
+        });
+
+    }
+
+}
+
+//=========================
+// GUILD QUEST
+//=========================
+
+Guild.quest={
+
+    kill:0,
+
+    target:500,
+
+    reward:5000
+
+};
+
+function guildQuestKill(){
+
+    if(!Guild.joined)return;
+
+    Guild.quest.kill++;
+
+    if(Guild.quest.kill>=Guild.quest.target){
+
+        Guild.quest.kill=0;
+
+        Player.gold+=Guild.quest.reward;
+
+    }
+
+}
+
+//=========================
+// GUILD UPDATE
+//=========================
+
+function updateGuild(dt){
+
+    updateGuildBonus();
+
+    guildRecruitNPC();
+
+}
+
+//=========================
+// DRAW GUILD QUEST
+//=========================
+
+function drawGuildQuest(){
+
+    if(!Guild.joined)return;
+
+    ctx.fillStyle="rgba(0,0,0,.55)";
+
+    ctx.fillRect(
+
+        canvas.width-340,
+
+        130,
+
+        300,
+
+        60
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.font="18px Arial";
+
+    ctx.fillText(
+
+        "Guild Mission",
+
+        canvas.width-320,
+
+        155
+
+    );
+
+    ctx.fillText(
+
+        Guild.quest.kill+
+
+        " / "+
+
+        Guild.quest.target,
+
+        canvas.width-320,
+
+        180
+
+    );
+
+}
+                //=========================
+// DUNGEON SYSTEM
+//=========================
+
+const Dungeon={
+
+    open:false,
+
+    floor:1,
+
+    maxFloor:100,
+
+    monsters:[],
+
+    boss:null,
+
+    clear:false,
+
+    timer:0,
+
+    enter(){
+
+        this.open=true;
+        this.clear=false;
+        this.generateFloor();
+
+    },
+
+    leave(){
+
+        this.open=false;
+        this.monsters.length=0;
+        this.boss=null;
+
+    },
+
+    generateFloor(){
+
+        this.monsters.length=0;
+
+        const count=8+this.floor;
+
+        for(let i=0;i<count;i++){
+
+            const types=[
+                "Slime",
+                "Goblin",
+                "Wolf",
+                "Skeleton",
+                "Zombie"
+            ];
+
+            const type=
+
+                types[
+                    Math.floor(
+                        Math.random()*types.length
+                    )
+                ];
+
+            const e=new Enemy(
+
+                Player.x-300+Math.random()*600,
+
+                Player.y-300+Math.random()*600,
+
+                type
+
+            );
+
+            const d=EnemyData[type];
+
+            e.maxHp=d.hp*(1+this.floor*.18);
+            e.hp=e.maxHp;
+
+            e.attack=d.atk*(1+this.floor*.12);
+            e.speed=d.speed;
+
+            e.exp=d.exp*this.floor;
+            e.gold=d.gold*this.floor;
+
+            e.color=d.color;
+
+            this.monsters.push(e);
+
+        }
+
+        if(this.floor%5==0){
+
+            this.spawnBoss();
+
+        }
+
+    },
+
+    spawnBoss(){
+
+        this.boss=new Boss(
+
+            Player.x+200,
+
+            Player.y+200,
+
+            "Dungeon Boss Lv."+this.floor
+
+        );
+
+        this.boss.maxHp*=1+this.floor*.25;
+        this.boss.hp=this.boss.maxHp;
+        this.boss.attack*=1+this.floor*.15;
+
+    }
+
+};
+
+//=========================
+// DUNGEON UPDATE
+//=========================
+
+function updateDungeon(dt){
+
+    if(!Dungeon.open)return;
+
+    let alive=0;
+
+    for(const e of Dungeon.monsters){
+
+        if(!e.dead){
+
+            e.update(dt);
+
+            alive++;
+
+        }
+
+    }
+
+    if(Dungeon.boss){
+
+        Dungeon.boss.update(dt);
+
+        if(!Dungeon.boss.dead){
+
+            alive++;
+
+        }
+
+    }
+
+    if(alive==0){
+
+        Dungeon.floor++;
+
+        Player.gold+=Dungeon.floor*100;
+
+        Player.exp+=Dungeon.floor*80;
+
+        Dungeon.generateFloor();
+
+    }
+
+}
+
+//=========================
+// DUNGEON DRAW
+//=========================
+
+function drawDungeon(){
+
+    if(!Dungeon.open)return;
+
+    for(const e of Dungeon.monsters){
+
+        e.draw();
+
+    }
+
+    if(Dungeon.boss){
+
+        Dungeon.boss.draw();
+
+    }
+
+}
+
+//=========================
+// DUNGEON UI
+//=========================
+
+function drawDungeonUI(){
+
+    if(!Dungeon.open)return;
+
+    ctx.fillStyle="rgba(0,0,0,.55)";
+    ctx.fillRect(
+
+        canvas.width-260,
+
+        210,
+
+        230,
+
+        90
+
+    );
+
+    ctx.fillStyle="gold";
+    ctx.font="22px Arial";
+
+    ctx.fillText(
+
+        "Dungeon",
+
+        canvas.width-240,
+
+        240
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.fillText(
+
+        "Floor : "+Dungeon.floor,
+
+        canvas.width-240,
+
+        270
+
+    );
+
+    ctx.fillText(
+
+        "Max : "+Dungeon.maxFloor,
+
+        canvas.width-240,
+
+        295
+
+    );
+
+}
+
+//=========================
+// DUNGEON KEY
+//=========================
+
+window.addEventListener(
+
+    "keydown",
+
+    e=>{
+
+        if(e.key.toLowerCase()=="u"){
+
+            if(Dungeon.open){
+
+                Dungeon.leave();
+
+            }else{
+
+                Dungeon.enter();
+
+            }
+
+        }
+
+    }
+
+);
+
+//=========================
+// DUNGEON CHEST
+//=========================
+
+function dungeonReward(){
+
+    if(Math.random()<0.25){
+
+        Inventory.add(
+
+            generateEquipment(
+
+                Player.level+
+
+                Dungeon.floor
+
+            )
+
+        );
+
+    }
+
+    if(Math.random()<0.05){
+
+        Player.petEgg++;
+
+    }
+
+}
+        //=========================
+// WORLD BOSS SYSTEM
+//=========================
+
+const WorldBoss={
+
+    active:false,
+
+    boss:null,
+
+    respawn:1800,
+
+    timer:1800,
+
+    announce:false,
+
+    damageRank:[],
+
+    spawn(){
+
+        this.active=true;
+
+        this.boss=new Boss(
+
+            9000,
+
+            9000,
+
+            "Ancient World Dragon"
+
+        );
+
+        this.boss.maxHp=300000;
+
+        this.boss.hp=this.boss.maxHp;
+
+        this.boss.attack=180;
+
+        this.boss.speed=75;
+
+        this.damageRank=[];
+
+        this.announce=true;
+
+    },
+
+    despawn(){
+
+        this.active=false;
+
+        this.timer=this.respawn;
+
+        this.boss=null;
+
+    }
+
+};
+
+//=========================
+// WORLD BOSS UPDATE
+//=========================
+
+function updateWorldBoss(dt){
+
+    if(!WorldBoss.active){
+
+        WorldBoss.timer-=dt;
+
+        if(WorldBoss.timer<=0){
+
+            WorldBoss.spawn();
+
+        }
+
+        return;
+
+    }
+
+    if(WorldBoss.boss){
+
+        WorldBoss.boss.update(dt);
+
+    }
+
+    if(WorldBoss.boss&&WorldBoss.boss.dead){
+
+        Player.gold+=50000;
+
+        Player.exp+=250000;
+
+        for(let i=0;i<10;i++){
+
+            Inventory.add(
+
+                generateEquipment(
+
+                    Player.level+25
+
+                )
+
+            );
+
+        }
+
+        WorldBoss.despawn();
+
+    }
+
+}
+
+//=========================
+// DAMAGE RANK
+//=========================
+
+function worldBossDamage(dmg){
+
+    if(!WorldBoss.active)return;
+
+    let row=
+
+        WorldBoss.damageRank.find(
+
+            a=>a.name=="Player"
+
+        );
+
+    if(!row){
+
+        row={
+
+            name:"Player",
+
+            damage:0
+
+        };
+
+        WorldBoss.damageRank.push(row);
+
+    }
+
+    row.damage+=dmg;
+
+}
+
+//=========================
+// DRAW WORLD BOSS
+//=========================
+
+function drawWorldBoss(){
+
+    if(!WorldBoss.active)return;
+
+    WorldBoss.boss.draw();
+
+}
+
+//=========================
+// WORLD BOSS HP BAR
+//=========================
+
+function drawWorldBossUI(){
+
+    if(!WorldBoss.active)return;
+
+    ctx.fillStyle="rgba(0,0,0,.75)";
+
+    ctx.fillRect(
+
+        120,
+
+        20,
+
+        canvas.width-240,
+
+        42
+
+    );
+
+    ctx.fillStyle="#aa0000";
+
+    ctx.fillRect(
+
+        125,
+
+        25,
+
+        (canvas.width-250)*
+
+        (
+
+            WorldBoss.boss.hp/
+
+            WorldBoss.boss.maxHp
+
+        ),
+
+        32
+
+    );
+
+    ctx.strokeStyle="white";
+
+    ctx.strokeRect(
+
+        120,
+
+        20,
+
+        canvas.width-240,
+
+        42
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.font="20px Arial";
+
+    ctx.fillText(
+
+        WorldBoss.boss.name,
+
+        canvas.width/2-90,
+
+        47
+
+    );
+
+}
+
+//=========================
+// WORLD BOSS TELEPORT
+//=========================
+
+window.addEventListener(
+
+    "keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="o"
+
+    ){
+
+        if(!WorldBoss.active)return;
+
+        Player.x=
+
+        WorldBoss.boss.x-120;
+
+        Player.y=
+
+        WorldBoss.boss.y;
+
+    }
+
+});
+
+//=========================
+// WORLD BOSS DROP
+//=========================
+
+function worldBossReward(){
+
+    Inventory.add(
+
+        {
+
+            name:"Dragon Sword",
+
+            attack:420,
+
+            defense:120,
+
+            rarity:"Ancient",
+
+            color:"#ffdd00",
+
+            plus:0,
+
+            sell:999999
+
+        }
+
+    );
+
+    Inventory.add(
+
+        {
+
+            name:"Dragon Armor",
+
+            attack:0,
+
+            defense:280,
+
+            rarity:"Ancient",
+
+            color:"#ff8844",
+
+            plus:0,
+
+            sell:999999
+
+        }
+
+    );
+
+    Player.petEgg+=3;
+
+    Player.gold+=100000;
+
+}
+
+//=========================
+// DAMAGE HOOK
+//=========================
+
+const oldWorldHit=hitEnemy;
+
+hitEnemy=function(){
+
+    oldWorldHit();
+
+    if(
+
+        WorldBoss.active&&
+
+        Attack.active&&
+
+        WorldBoss.boss
+
+    ){
+
+        const b=WorldBoss.boss;
+
+        if(
+
+            Attack.x<b.x+64&&
+            Attack.x+36>b.x&&
+            Attack.y<b.y+64&&
+            Attack.y+36>b.y
+
+        ){
+
+            const dmg=
+
+                Player.attack;
+
+            b.hp-=dmg;
+
+            worldBossDamage(dmg);
+
+            if(b.hp<=0){
+
+                b.dead=true;
+
+                worldBossReward();
+
+            }
+
+        }
+
+    }
+
+};
+                //=========================
+// TOWER OF TRIALS SYSTEM
+//=========================
+
+const Tower={
+
+    open:false,
+
+    floor:1,
+
+    checkpoint:1,
+
+    highest:1,
+
+    maxFloor:500,
+
+    enemies:[],
+
+    boss:null,
+
+    rewardReady:false,
+
+    timer:0,
+
+    enter(){
+
+        this.open=true;
+
+        this.loadFloor();
+
+    },
+
+    leave(){
+
+        this.open=false;
+
+        this.enemies.length=0;
+
+        this.boss=null;
+
+    },
+
+    loadFloor(){
+
+        this.enemies.length=0;
+
+        this.boss=null;
+
+        this.rewardReady=false;
+
+        const amount=5+Math.floor(this.floor/2);
+
+        const list=[
+
+            "Slime",
+            "Goblin",
+            "Wolf",
+            "Skeleton",
+            "Zombie",
+            "Spider",
+            "Orc"
+
+        ];
+
+        for(let i=0;i<amount;i++){
+
+            const type=list[
+                Math.floor(
+                    Math.random()*list.length
+                )
+            ];
+
+            const e=new Enemy(
+
+                700+Math.random()*900,
+
+                700+Math.random()*900,
+
+                type
+
+            );
+
+            const scale=1+this.floor*0.08;
+
+            e.maxHp*=scale;
+            e.hp=e.maxHp;
+            e.attack*=scale;
+            e.exp*=scale;
+            e.gold*=scale;
+
+            this.enemies.push(e);
+
+        }
+
+        if(this.floor%10==0){
+
+            this.spawnBoss();
+
+        }
+
+    },
+
+    spawnBoss(){
+
+        this.boss=new Boss(
+
+            1300,
+
+            1300,
+
+            "Tower Guardian "+this.floor
+
+        );
+
+        this.boss.maxHp*=
+
+            1+
+
+            this.floor*0.15;
+
+        this.boss.hp=
+
+            this.boss.maxHp;
+
+        this.boss.attack*=
+
+            1+
+
+            this.floor*0.12;
+
+    }
+
+};
+
+//=========================
+// UPDATE
+//=========================
+
+function updateTower(dt){
+
+    if(!Tower.open)return;
+
+    let alive=0;
+
+    for(const e of Tower.enemies){
+
+        if(e.dead)continue;
+
+        e.update(dt);
+
+        alive++;
+
+    }
+
+    if(Tower.boss){
+
+        Tower.boss.update(dt);
+
+        if(!Tower.boss.dead)
+
+            alive++;
+
+    }
+
+    if(alive==0){
+
+        Tower.rewardReady=true;
+
+    }
+
+}
+
+//=========================
+// NEXT FLOOR
+//=========================
+
+function towerNextFloor(){
+
+    if(!Tower.rewardReady)return;
+
+    Tower.rewardReady=false;
+
+    Tower.floor++;
+
+    if(Tower.floor>
+
+        Tower.highest){
+
+        Tower.highest=
+
+        Tower.floor;
+
+    }
+
+    if(Tower.floor%25==0){
+
+        Tower.checkpoint=
+
+        Tower.floor;
+
+    }
+
+    Player.exp+=
+
+        Tower.floor*250;
+
+    Player.gold+=
+
+        Tower.floor*150;
+
+    Inventory.add(
+
+        generateEquipment(
+
+            Player.level+
+
+            Math.floor(
+
+                Tower.floor/4
+
+            )
+
+        )
+
+    );
+
+    Tower.loadFloor();
+
+}
+
+//=========================
+// KEY
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+if(e.key=="n"){
+
+towerNextFloor();
+
+}
+
+if(e.key=="m"){
+
+if(Tower.open)
+
+Tower.leave();
+
+else
+
+Tower.enter();
+
+}
+
+});
+
+//=========================
+// DRAW
+//=========================
+
+function drawTower(){
+
+    if(!Tower.open)return;
+
+    for(const e of Tower.enemies)
+
+        e.draw();
+
+    if(Tower.boss)
+
+        Tower.boss.draw();
+
+}
+
+//=========================
+// UI
+//=========================
+
+function drawTowerUI(){
+
+if(!Tower.open)return;
+
+ctx.fillStyle=
+
+"rgba(0,0,0,.6)";
+
+ctx.fillRect(
+
+20,
+
+220,
+
+280,
+
+150
+
+);
+
+ctx.fillStyle="gold";
+
+ctx.font="24px Arial";
+
+ctx.fillText(
+
+"Tower Of Trials",
+
+35,
+
+250
+
+);
+
+ctx.fillStyle="white";
+
+ctx.font="18px Arial";
+
+ctx.fillText(
+
+"Floor : "+
+
+Tower.floor,
+
+35,
+
+285
+
+);
+
+ctx.fillText(
+
+"Highest : "+
+
+Tower.highest,
+
+35,
+
+315
+
+);
+
+ctx.fillText(
+
+"Checkpoint : "+
+
+Tower.checkpoint,
+
+35,
+
+345
+
+);
+
+if(Tower.rewardReady){
+
+ctx.fillStyle="lime";
+
+ctx.fillText(
+
+"Press N",
+
+35,
+
+375
+
+);
+
+}
+
+}
+
+//=========================
+// CHECKPOINT RETURN
+//=========================
+
+function towerReturnCheckpoint(){
+
+Tower.floor=
+
+Tower.checkpoint;
+
+Tower.loadFloor();
+
+}
+
+//=========================
+// FAIL
+//=========================
+
+function towerFail(){
+
+if(Player.hp<=0){
+
+Player.hp=
+
+Player.maxHp;
+
+towerReturnCheckpoint();
+
+}
+
+}
+
+//=========================
+// UNIQUE REWARD
+//=========================
+
+function towerMilestoneReward(){
+
+switch(Tower.floor){
+
+case 50:
+
+Inventory.add({
+
+name:"Tower Blade",
+
+attack:220,
+
+defense:40,
+
+rarity:"Legendary",
+
+color:"#ffbb22",
+
+plus:0
+
+});
+
+break;
+
+case 100:
+
+Player.petEgg++;
+
+Player.petEgg++;
+
+break;
+
+case 200:
+
+Player.maxHp+=500;
+
+Player.attack+=60;
+
+break;
+
+case 300:
+
+Inventory.add({
+
+name:"Ancient Crown",
+
+attack:80,
+
+defense:260,
+
+rarity:"Ancient",
+
+color:"#ffee00",
+
+plus:0
+
+});
+
+break;
+
+case 500:
+
+Inventory.add({
+
+name:"Tower God's Sword",
+
+attack:888,
+
+defense:300,
+
+rarity:"Mythic",
+
+color:"#ff00ff",
+
+plus:15
+
+});
+
+Player.gold+=1000000;
+
+Player.exp+=5000000;
+
+break;
+
+}
+
+}
+
+//=========================
+// FLOOR CLEAR HOOK
+//=========================
+
+const oldTowerNext=towerNextFloor;
+
+towerNextFloor=function(){
+
+oldTowerNext();
+
+towerMilestoneReward();
+
+};
+    //=========================
+// TRADING HOUSE SYSTEM
+//=========================
+
+const Market={
+
+    open:false,
+
+    tax:0.05,
+
+    listings:[],
+
+    history:[],
+
+    nextId:1,
+
+    categories:[
+
+        "Weapon",
+
+        "Armor",
+
+        "Accessory",
+
+        "Material",
+
+        "Pet",
+
+        "Rune"
+
+    ],
+
+    add(item,price){
+
+        this.listings.push({
+
+            id:this.nextId++,
+
+            item:structuredClone(item),
+
+            seller:"Player",
+
+            price:price,
+
+            time:3600
+
+        });
+
+    },
+
+    remove(id){
+
+        this.listings=
+
+        this.listings.filter(
+
+            a=>a.id!=id
+
+        );
+
+    }
+
+};
+
+//=========================
+// MARKET UPDATE
+//=========================
+
+function updateMarket(dt){
+
+    for(const l of Market.listings){
+
+        l.time-=dt;
+
+    }
+
+    for(
+
+        let i=
+
+        Market.listings.length-1;
+
+        i>=0;
+
+        i--
+
+    ){
+
+        if(
+
+            Market.listings[i].time<=0
+
+        ){
+
+            Inventory.add(
+
+                Market.listings[i].item
+
+            );
+
+            Market.listings.splice(i,1);
+
+        }
+
+    }
+
+}
+
+//=========================
+// RANDOM NPC MARKET
+//=========================
+
+function npcMarketRefresh(){
+
+    if(
+
+        Math.random()>
+
+        .003
+
+    )return;
+
+    const item=
+
+        generateEquipment(
+
+            Player.level+
+
+            Math.floor(
+
+                Math.random()*10
+
+            )
+
+        );
+
+    Market.listings.push({
+
+        id:Market.nextId++,
+
+        seller:"NPC Merchant",
+
+        item:item,
+
+        price:item.sell*2,
+
+        time:999999
+
+    });
+
+}
+
+//=========================
+// BUY
+//=========================
+
+Market.buy=function(id){
+
+    for(
+
+        let i=0;
+
+        i<this.listings.length;
+
+        i++
+
+    ){
+
+        const row=
+
+        this.listings[i];
+
+        if(row.id!=id)
+
+        continue;
+
+        if(
+
+            Player.gold<
+
+            row.price
+
+        )return;
+
+        Player.gold-=
+
+        row.price;
+
+        Inventory.add(
+
+            row.item
+
+        );
+
+        this.history.push({
+
+            buyer:"Player",
+
+            item:row.item.name,
+
+            gold:row.price
+
+        });
+
+        this.listings.splice(i,1);
+
+        return;
+
+    }
+
+};
+
+//=========================
+// SELL
+//=========================
+
+function sellInventoryItem(index){
+
+    const item=
+
+    Inventory.slots[index];
+
+    if(!item)return;
+
+    Market.add(
+
+        item,
+
+        item.sell||
+
+        100
+
+    );
+
+    Inventory.slots[index]=null;
+
+}
+
+//=========================
+// WINDOW
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="m"
+
+    ){
+
+        Market.open=
+
+        !Market.open;
+
+    }
+
+});
+
+//=========================
+// DRAW
+//=========================
+
+function drawMarket(){
+
+    if(!Market.open)return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.90)";
+
+    ctx.fillRect(
+
+        60,
+
+        40,
+
+        900,
+
+        620
+
+    );
+
+    ctx.strokeStyle="gold";
+
+    ctx.strokeRect(
+
+        60,
+
+        40,
+
+        900,
+
+        620
+
+    );
+
+    ctx.fillStyle="gold";
+
+    ctx.font="28px Arial";
+
+    ctx.fillText(
+
+        "Trading House",
+
+        90,
+
+        80
+
+    );
+
+    let y=130;
+
+    ctx.font="17px Arial";
+
+    for(
+
+        let i=0;
+
+        i<Market.listings.length&&
+
+        i<18;
+
+        i++
+
+    ){
+
+        const l=
+
+        Market.listings[i];
+
+        ctx.fillStyle="white";
+
+        ctx.fillText(
+
+            l.item.name,
+
+            90,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            l.item.rarity||
+
+            "Common",
+
+            260,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            l.price+
+
+            " G",
+
+            420,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            l.seller,
+
+            560,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            Math.floor(
+
+                l.time
+
+            )+
+
+            "s",
+
+            760,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// SEARCH
+//=========================
+
+Market.search=function(name){
+
+    return this.listings.filter(
+
+        a=>
+
+        a.item.name
+
+        .toLowerCase()
+
+        .includes(
+
+            name
+
+            .toLowerCase()
+
+        )
+
+    );
+
+};
+
+//=========================
+// PRICE
+//=========================
+
+function averageMarketPrice(name){
+
+    let total=0;
+
+    let count=0;
+
+    for(
+
+        const l of
+
+        Market.listings
+
+    ){
+
+        if(
+
+            l.item.name==name
+
+        ){
+
+            total+=l.price;
+
+            count++;
+
+        }
+
+    }
+
+    if(count==0)
+
+    return 0;
+
+    return Math.floor(
+
+        total/count
+
+    );
+
+}
+
+//=========================
+// MARKET NPC
+//=========================
+
+NPCs.push(
+
+new NPC(
+
+1450,
+
+950,
+
+"Auction Master",
+
+"Press M to open the Trading House."
+
+)
+
+);
+
+//=========================
+// AUTO REFRESH
+//=========================
+
+setInterval(
+
+npcMarketRefresh,
+
+5000
+
+);
+
+//=========================
+// MARKET TAX
+//=========================
+
+function marketTax(price){
+
+    return Math.floor(
+
+        price*
+
+        Market.tax
+
+    );
+
+}
+
+//=========================
+// COMPLETE SELL
+//=========================
+
+function completeSale(price){
+
+    Player.gold+=
+
+    price-
+
+    marketTax(price);
+
+}
+            //=========================
+// MAIL SYSTEM
+//=========================
+
+const MailSystem={
+
+    open:false,
+
+    mails:[],
+
+    nextId:1
+
+};
+
+function sendMail(
+
+title,
+
+text,
+
+gold=0,
+
+items=[]
+
+){
+
+    MailSystem.mails.push({
+
+        id:MailSystem.nextId++,
+
+        title,
+
+        text,
+
+        gold,
+
+        items,
+
+        read:false,
+
+        claimed:false,
+
+        time:Date.now()
+
+    });
+
+}
+
+//=========================
+// CLAIM MAIL
+//=========================
+
+function claimMail(id){
+
+    const mail=
+
+    MailSystem.mails.find(
+
+        m=>m.id==id
+
+    );
+
+    if(
+
+        !mail||
+
+        mail.claimed
+
+    )return;
+
+    Player.gold+=mail.gold;
+
+    for(
+
+        const item
+
+        of mail.items
+
+    ){
+
+        Inventory.add(
+
+            structuredClone(item)
+
+        );
+
+    }
+
+    mail.claimed=true;
+
+}
+
+//=========================
+// DRAW MAIL
+//=========================
+
+function drawMail(){
+
+    if(
+
+        !MailSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.92)";
+
+    ctx.fillRect(
+
+        120,
+
+        50,
+
+        760,
+
+        560
+
+    );
+
+    ctx.strokeStyle="gold";
+
+    ctx.strokeRect(
+
+        120,
+
+        50,
+
+        760,
+
+        560
+
+    );
+
+    ctx.fillStyle="gold";
+
+    ctx.font="28px Arial";
+
+    ctx.fillText(
+
+        "Mailbox",
+
+        150,
+
+        90
+
+    );
+
+    let y=140;
+
+    ctx.font="18px Arial";
+
+    for(
+
+        const mail
+
+        of MailSystem.mails
+
+    ){
+
+        ctx.fillStyle=
+
+        mail.claimed
+
+        ?"gray"
+
+        :"white";
+
+        ctx.fillText(
+
+            mail.title,
+
+            150,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            mail.gold+
+
+            " G",
+
+            520,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            mail.claimed?
+
+            "Claimed"
+
+            :"Ready",
+
+            650,
+
+            y
+
+        );
+
+        y+=30;
+
+    }
+
+}
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="n"
+
+    ){
+
+        MailSystem.open=
+
+        !MailSystem.open;
+
+    }
+
+);
+
+//=========================
+// AUCTION SYSTEM
+//=========================
+
+const Auction={
+
+    listings:[],
+
+    nextId:1
+
+};
+
+function createAuction(
+
+item,
+
+startPrice,
+
+duration
+
+){
+
+    Auction.listings.push({
+
+        id:Auction.nextId++,
+
+        item,
+
+        owner:"Player",
+
+        bid:startPrice,
+
+        highest:"",
+
+        remain:duration
+
+    });
+
+}
+
+function bidAuction(
+
+id,
+
+price
+
+){
+
+    const row=
+
+    Auction.listings.find(
+
+        a=>a.id==id
+
+    );
+
+    if(!row)return;
+
+    if(
+
+        price<=row.bid
+
+    )return;
+
+    if(
+
+        Player.gold<price
+
+    )return;
+
+    Player.gold-=price;
+
+    row.bid=price;
+
+    row.highest="Player";
+
+}
+
+function updateAuction(dt){
+
+    for(
+
+        const row
+
+        of Auction.listings
+
+    ){
+
+        row.remain-=dt;
+
+    }
+
+    for(
+
+        let i=
+
+        Auction.listings.length-1;
+
+        i>=0;
+
+        i--
+
+    ){
+
+        if(
+
+            Auction.listings[i]
+
+            .remain<=0
+
+        ){
+
+            if(
+
+                Auction.listings[i]
+
+                .highest=="Player"
+
+            ){
+
+                Inventory.add(
+
+                    Auction.listings[i]
+
+                    .item
+
+                );
+
+            }
+
+            Auction.listings.splice(i,1);
+
+        }
+
+    }
+
+}
+
+//=========================
+// FRIEND SYSTEM
+//=========================
+
+const Friends={
+
+    list:[]
+
+};
+
+function addFriend(
+
+name
+
+){
+
+    Friends.list.push({
+
+        name,
+
+        online:
+
+        Math.random()<0.7,
+
+        level:
+
+        Math.floor(
+
+            1+
+
+            Math.random()*100
+
+        )
+
+    });
+
+}
+
+function drawFriends(){
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.60)";
+
+    ctx.fillRect(
+
+        15,
+
+        220,
+
+        220,
+
+        240
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.font="18px Arial";
+
+    ctx.fillText(
+
+        "Friends",
+
+        35,
+
+        250
+
+    );
+
+    let y=280;
+
+    for(
+
+        const f
+
+        of Friends.list
+
+    ){
+
+        ctx.fillStyle=
+
+        f.online?
+
+        "lime"
+
+        :"gray";
+
+        ctx.fillText(
+
+            f.name+
+
+            " Lv."+f.level,
+
+            30,
+
+            y
+
+        );
+
+        y+=24;
+
+    }
+
+}
+
+//=========================
+// DAILY LOGIN
+//=========================
+
+const DailyReward={
+
+    day:1,
+
+    claimed:false
+
+};
+
+function claimDaily(){
+
+    if(
+
+        DailyReward.claimed
+
+    )return;
+
+    Player.gold+=
+
+    DailyReward.day*800;
+
+    Player.exp+=
+
+    DailyReward.day*500;
+
+    Inventory.add(
+
+        generateEquipment(
+
+            Player.level+
+
+            DailyReward.day
+
+        )
+
+    );
+
+    DailyReward.claimed=true;
+
+}
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="l"
+
+    ){
+
+        claimDaily();
+
+    }
+
+);
+
+//=========================
+// AUTO MAIL
+//=========================
+
+sendMail(
+
+"Welcome",
+
+"Welcome to Hero Of Wind Land!",
+
+1000,
+
+[
+
+generateEquipment(5)
+
+]
+
+);
+
+sendMail(
+
+"Event Reward",
+
+"Thanks for joining.",
+
+3000,
+
+[
+
+generateEquipment(10),
+
+generateEquipment(10)
+
+]
+
+);
+
+addFriend("Knight001");
+addFriend("WindMage");
+addFriend("DarkHunter");
+addFriend("PhoenixGirl");
+            //=========================
+// PARTY SYSTEM
+//=========================
+
+const Party={
+
+    members:[],
+
+    maxMembers:4,
+
+    expBonus:0,
+
+    goldBonus:0,
+
+    followDistance:70,
+
+    autoAttack:true,
+
+    autoHeal:true
+
+};
+
+//=========================
+// COMPANION
+//=========================
+
+class Companion{
+
+    constructor(name,job){
+
+        this.name=name;
+
+        this.job=job;
+
+        this.level=1;
+
+        this.hp=150;
+
+        this.maxHp=150;
+
+        this.attack=18;
+
+        this.defense=6;
+
+        this.speed=140;
+
+        this.range=90;
+
+        this.x=Player.x;
+
+        this.y=Player.y;
+
+        this.target=null;
+
+        this.dead=false;
+
+        this.exp=0;
+
+    }
+
+    update(dt){
+
+        if(this.dead)return;
+
+        const dx=Player.x-this.x;
+        const dy=Player.y-this.y;
+
+        const dist=Math.hypot(dx,dy);
+
+        if(dist>Party.followDistance){
+
+            this.x+=dx/dist*this.speed*dt;
+            this.y+=dy/dist*this.speed*dt;
+
+        }
+
+        if(Party.autoAttack){
+
+            this.findTarget();
+
+            this.attackEnemy(dt);
+
+        }
+
+        if(
+
+            Party.autoHeal&&
+
+            this.job=="Priest"
+
+        ){
+
+            this.healParty();
+
+        }
+
+    }
+
+    draw(){
+
+        ctx.fillStyle="#33aaff";
+
+        ctx.beginPath();
+
+        ctx.arc(
+
+            this.x,
+
+            this.y,
+
+            14,
+
+            0,
+
+            Math.PI*2
+
+        );
+
+        ctx.fill();
+
+        ctx.fillStyle="white";
+
+        ctx.font="12px Arial";
+
+        ctx.fillText(
+
+            this.name,
+
+            this.x-18,
+
+            this.y-18
+
+        );
+
+    }
+
+}
+
+//=========================
+// FIND TARGET
+//=========================
+
+Companion.prototype.findTarget=function(){
+
+    let best=null;
+
+    let bestDist=999999;
+
+    for(const e of Enemies){
+
+        if(e.dead)continue;
+
+        const d=Math.hypot(
+
+            e.x-this.x,
+
+            e.y-this.y
+
+        );
+
+        if(d<bestDist){
+
+            best=e;
+
+            bestDist=d;
+
+        }
+
+    }
+
+    this.target=best;
+
+};
+
+//=========================
+// ATTACK
+//=========================
+
+Companion.prototype.attackEnemy=function(dt){
+
+    if(!this.target)return;
+
+    const d=Math.hypot(
+
+        this.target.x-this.x,
+
+        this.target.y-this.y
+
+    );
+
+    if(d>this.range){
+
+        this.x+=(
+
+            this.target.x-this.x
+
+        )/d*this.speed*dt;
+
+        this.y+=(
+
+            this.target.y-this.y
+
+        )/d*this.speed*dt;
+
+        return;
+
+    }
+
+    this.target.hp-=
+
+        this.attack*dt*8;
+
+};
+
+//=========================
+// HEAL
+//=========================
+
+Companion.prototype.healParty=function(){
+
+    if(
+
+        Player.hp<
+
+        Player.maxHp
+
+    ){
+
+        Player.hp+=0.4;
+
+    }
+
+    for(
+
+        const m
+
+        of Party.members
+
+    ){
+
+        if(
+
+            m.hp<
+
+            m.maxHp
+
+        ){
+
+            m.hp+=0.25;
+
+        }
+
+    }
+
+};
+
+//=========================
+// ADD MEMBER
+//=========================
+
+function recruitCompanion(
+
+name,
+
+job
+
+){
+
+    if(
+
+        Party.members.length>=
+
+        Party.maxMembers
+
+    )return;
+
+    Party.members.push(
+
+        new Companion(
+
+            name,
+
+            job
+
+        )
+
+    );
+
+}
+
+//=========================
+// UPDATE
+//=========================
+
+function updateParty(dt){
+
+    for(
+
+        const m
+
+        of Party.members
+
+    ){
+
+        m.update(dt);
+
+    }
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawParty(){
+
+    for(
+
+        const m
+
+        of Party.members
+
+    ){
+
+        m.draw();
+
+    }
+
+}
+
+//=========================
+// PARTY BONUS
+//=========================
+
+function partyBonus(){
+
+    Player.attack=
+
+        Player.baseAttack+
+
+        Party.members.length*3;
+
+    Player.maxHp=
+
+        Player.baseHp+
+
+        Party.members.length*25;
+
+}
+
+//=========================
+// DEFAULT MEMBERS
+//=========================
+
+recruitCompanion(
+
+"Luna",
+
+"Priest"
+
+);
+
+recruitCompanion(
+
+"Leon",
+
+"Knight"
+
+);
+
+recruitCompanion(
+
+"Aria",
+
+"Archer"
+
+);
+            //=========================
+// MOUNT SYSTEM
+//=========================
+
+const MountSystem={
+
+    list:[],
+
+    equipped:null,
+
+    maxLevel:100
+
+};
+
+//=========================
+// MOUNT CLASS
+//=========================
+
+class Mount{
+
+    constructor(name,type){
+
+        this.id=Date.now()+Math.random();
+
+        this.name=name;
+
+        this.type=type;
+
+        this.level=1;
+
+        this.exp=0;
+
+        this.nextExp=100;
+
+        this.speed=40;
+
+        this.hp=100;
+
+        this.attack=10;
+
+        this.rarity="Common";
+
+        this.star=1;
+
+    }
+
+}
+
+//=========================
+// CREATE
+//=========================
+
+function createMount(name,type){
+
+    const m=new Mount(name,type);
+
+    MountSystem.list.push(m);
+
+    return m;
+
+}
+
+//=========================
+// EQUIP
+//=========================
+
+function equipMount(id){
+
+    for(const m of MountSystem.list){
+
+        if(m.id==id){
+
+            MountSystem.equipped=m;
+
+            return;
+
+        }
+
+    }
+
+}
+
+//=========================
+// UNEQUIP
+//=========================
+
+function unequipMount(){
+
+    MountSystem.equipped=null;
+
+}
+
+//=========================
+// LEVEL UP
+//=========================
+
+function mountGainExp(exp){
+
+    const m=MountSystem.equipped;
+
+    if(!m)return;
+
+    m.exp+=exp;
+
+    while(
+
+        m.exp>=m.nextExp&&
+
+        m.level<MountSystem.maxLevel
+
+    ){
+
+        m.exp-=m.nextExp;
+
+        m.level++;
+
+        m.nextExp=Math.floor(
+
+            m.nextExp*1.18
+
+        );
+
+        m.speed+=2;
+
+        m.hp+=18;
+
+        m.attack+=4;
+
+    }
+
+}
+
+//=========================
+// PLAYER BONUS
+//=========================
+
+function updateMountBonus(){
+
+    const m=MountSystem.equipped;
+
+    if(!m)return;
+
+    Player.moveSpeed=
+
+        Player.baseMoveSpeed+
+
+        m.speed;
+
+    Player.attack=
+
+        Player.baseAttack+
+
+        m.attack;
+
+    Player.maxHp=
+
+        Player.baseHp+
+
+        m.hp;
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawMount(){
+
+    const m=MountSystem.equipped;
+
+    if(!m)return;
+
+    ctx.fillStyle="#8B4513";
+
+    ctx.fillRect(
+
+        Player.x-18,
+
+        Player.y+12,
+
+        36,
+
+        20
+
+    );
+
+}
+
+//=========================
+// UI
+//=========================
+
+MountSystem.open=false;
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="k"
+
+    ){
+
+        MountSystem.open=
+
+        !MountSystem.open;
+
+    }
+
+});
+
+function drawMountUI(){
+
+    if(
+
+        !MountSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.9)";
+
+    ctx.fillRect(
+
+        150,
+
+        60,
+
+        700,
+
+        500
+
+    );
+
+    ctx.strokeStyle="gold";
+
+    ctx.strokeRect(
+
+        150,
+
+        60,
+
+        700,
+
+        500
+
+    );
+
+    ctx.fillStyle="gold";
+
+    ctx.font="28px Arial";
+
+    ctx.fillText(
+
+        "Mount Stable",
+
+        180,
+
+        100
+
+    );
+
+    let y=150;
+
+    ctx.font="18px Arial";
+
+    for(const m of MountSystem.list){
+
+        ctx.fillStyle="white";
+
+        ctx.fillText(
+
+            m.name,
+
+            180,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            "Lv."+m.level,
+
+            360,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            m.rarity,
+
+            450,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// RANDOM DROP
+//=========================
+
+function mountDrop(){
+
+    if(
+
+        Math.random()>
+
+        0.02
+
+    )return;
+
+    const names=[
+
+        "Brown Horse",
+
+        "White Tiger",
+
+        "Golden Wolf",
+
+        "Shadow Panther",
+
+        "Crystal Deer",
+
+        "Wind Dragon"
+
+    ];
+
+    const name=
+
+        names[
+
+            Math.floor(
+
+                Math.random()*
+
+                names.length
+
+            )
+
+        ];
+
+    createMount(
+
+        name,
+
+        "Ground"
+
+    );
+
+}
+
+//=========================
+// DEFAULT
+//=========================
+
+createMount(
+
+"Brown Horse",
+
+"Ground"
+
+);
+
+equipMount(
+
+MountSystem.list[0].id
+
+);
+
+//=========================
+// UPDATE
+//=========================
+
+function updateMount(dt){
+
+    updateMountBonus();
+
+    mountGainExp(
+
+        dt*2
+
+    );
+
+}
+            //=========================
+// WING SYSTEM
+//=========================
+
+const WingSystem={
+
+    list:[],
+
+    equipped:null,
+
+    maxLevel:100,
+
+    open:false
+
+};
+
+//=========================
+// WING CLASS
+//=========================
+
+class Wing{
+
+    constructor(name,rarity){
+
+        this.id=Date.now()+Math.random();
+
+        this.name=name;
+
+        this.rarity=rarity;
+
+        this.level=1;
+
+        this.star=1;
+
+        this.exp=0;
+
+        this.nextExp=120;
+
+        this.attack=15;
+
+        this.defense=12;
+
+        this.hp=120;
+
+        this.crit=1;
+
+        this.speed=5;
+
+        this.dodge=1;
+
+    }
+
+}
+
+//=========================
+// CREATE
+//=========================
+
+function createWing(name,rarity){
+
+    const wing=new Wing(
+
+        name,
+
+        rarity
+
+    );
+
+    WingSystem.list.push(wing);
+
+    return wing;
+
+}
+
+//=========================
+// EQUIP
+//=========================
+
+function equipWing(id){
+
+    for(const wing of WingSystem.list){
+
+        if(wing.id==id){
+
+            WingSystem.equipped=wing;
+
+            return;
+
+        }
+
+    }
+
+}
+
+//=========================
+// EXP
+//=========================
+
+function wingGainExp(exp){
+
+    const wing=
+
+    WingSystem.equipped;
+
+    if(!wing)return;
+
+    wing.exp+=exp;
+
+    while(
+
+        wing.exp>=wing.nextExp&&
+
+        wing.level<WingSystem.maxLevel
+
+    ){
+
+        wing.exp-=wing.nextExp;
+
+        wing.level++;
+
+        wing.nextExp=Math.floor(
+
+            wing.nextExp*1.20
+
+        );
+
+        wing.attack+=4;
+
+        wing.defense+=3;
+
+        wing.hp+=30;
+
+        wing.crit+=0.3;
+
+        wing.speed+=0.2;
+
+    }
+
+}
+
+//=========================
+// STAR UPGRADE
+//=========================
+
+function upgradeWingStar(){
+
+    const wing=
+
+    WingSystem.equipped;
+
+    if(!wing)return false;
+
+    if(
+
+        Player.gold<
+
+        wing.star*5000
+
+    )return false;
+
+    Player.gold-=
+
+    wing.star*5000;
+
+    const rate=
+
+    Math.max(
+
+        95-
+
+        wing.star*8,
+
+        20
+
+    );
+
+    if(
+
+        Math.random()*100<
+
+        rate
+
+    ){
+
+        wing.star++;
+
+        wing.attack+=12;
+
+        wing.defense+=10;
+
+        wing.hp+=120;
+
+        return true;
+
+    }
+
+    return false;
+
+}
+
+//=========================
+// BONUS
+//=========================
+
+function updateWingBonus(){
+
+    const wing=
+
+    WingSystem.equipped;
+
+    if(!wing)return;
+
+    Player.critRate=
+
+        (Player.critRate||0)+
+
+        wing.crit;
+
+    Player.dodgeRate=
+
+        (Player.dodgeRate||0)+
+
+        wing.dodge;
+
+}
+
+//=========================
+// DROP
+//=========================
+
+function wingDrop(){
+
+    if(
+
+        Math.random()>0.01
+
+    )return;
+
+    const names=[
+
+        "Angel Wing",
+
+        "Dark Wing",
+
+        "Phoenix Wing",
+
+        "Crystal Wing",
+
+        "Dragon Wing",
+
+        "Celestial Wing"
+
+    ];
+
+    const rarities=[
+
+        "Rare",
+
+        "Epic",
+
+        "Legendary",
+
+        "Mythic"
+
+    ];
+
+    createWing(
+
+        names[
+
+            Math.floor(
+
+                Math.random()*
+
+                names.length
+
+            )
+
+        ],
+
+        rarities[
+
+            Math.floor(
+
+                Math.random()*
+
+                rarities.length
+
+            )
+
+        ]
+
+    );
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawWing(){
+
+    const wing=
+
+    WingSystem.equipped;
+
+    if(!wing)return;
+
+    ctx.strokeStyle="#88ddff";
+
+    ctx.lineWidth=4;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+
+        Player.x-8,
+
+        Player.y
+
+    );
+
+    ctx.lineTo(
+
+        Player.x-34,
+
+        Player.y-26
+
+    );
+
+    ctx.lineTo(
+
+        Player.x-46,
+
+        Player.y+5
+
+    );
+
+    ctx.stroke();
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+
+        Player.x+8,
+
+        Player.y
+
+    );
+
+    ctx.lineTo(
+
+        Player.x+34,
+
+        Player.y-26
+
+    );
+
+    ctx.lineTo(
+
+        Player.x+46,
+
+        Player.y+5
+
+    );
+
+    ctx.stroke();
+
+}
+
+//=========================
+// WINDOW
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="v"
+
+    ){
+
+        WingSystem.open=
+
+        !WingSystem.open;
+
+    }
+
+});
+
+function drawWingUI(){
+
+    if(
+
+        !WingSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.90)";
+
+    ctx.fillRect(
+
+        170,
+
+        50,
+
+        650,
+
+        520
+
+    );
+
+    ctx.strokeStyle="cyan";
+
+    ctx.strokeRect(
+
+        170,
+
+        50,
+
+        650,
+
+        520
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.font="26px Arial";
+
+    ctx.fillText(
+
+        "Wing",
+
+        210,
+
+        90
+
+    );
+
+    let y=140;
+
+    ctx.font="18px Arial";
+
+    for(const wing of WingSystem.list){
+
+        ctx.fillStyle="gold";
+
+        ctx.fillText(
+
+            wing.name,
+
+            210,
+
+            y
+
+        );
+
+        ctx.fillStyle="white";
+
+        ctx.fillText(
+
+            "Lv."+wing.level,
+
+            430,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            "★"+wing.star,
+
+            520,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            wing.rarity,
+
+            590,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// DEFAULT
+//=========================
+
+createWing(
+
+"Angel Wing",
+
+"Rare"
+
+);
+
+equipWing(
+
+WingSystem.list[0].id
+
+);
+
+//=========================
+// UPDATE
+//=========================
+
+function updateWing(dt){
+
+    wingGainExp(
+
+        dt*1.5
+
+    );
+
+    updateWingBonus();
+
+}
+            //=========================
+// ARTIFACT SYSTEM
+//=========================
+
+const ArtifactSystem={
+
+    list:[],
+
+    equipped:new Array(6).fill(null),
+
+    open:false,
+
+    maxLevel:50
+
+};
+
+//=========================
+// ARTIFACT CLASS
+//=========================
+
+class Artifact{
+
+    constructor(name,rarity){
+
+        this.id=Date.now()+Math.random();
+
+        this.name=name;
+
+        this.rarity=rarity;
+
+        this.level=1;
+
+        this.exp=0;
+
+        this.nextExp=200;
+
+        this.slot="";
+
+        this.attack=0;
+
+        this.defense=0;
+
+        this.hp=0;
+
+        this.crit=0;
+
+        this.critDamage=0;
+
+        this.lifeSteal=0;
+
+        this.cooldown=0;
+
+    }
+
+}
+
+//=========================
+// CREATE
+//=========================
+
+function createArtifact(
+
+name,
+
+rarity,
+
+slot
+
+){
+
+    const a=new Artifact(
+
+        name,
+
+        rarity
+
+    );
+
+    a.slot=slot;
+
+    ArtifactSystem.list.push(a);
+
+    return a;
+
+}
+
+//=========================
+// EQUIP
+//=========================
+
+function equipArtifact(id){
+
+    const art=
+
+    ArtifactSystem.list.find(
+
+        a=>a.id==id
+
+    );
+
+    if(!art)return;
+
+    const slots={
+
+        Core:0,
+
+        Heart:1,
+
+        Soul:2,
+
+        Eye:3,
+
+        Crown:4,
+
+        Relic:5
+
+    };
+
+    ArtifactSystem.equipped[
+
+        slots[art.slot]
+
+    ]=art;
+
+}
+
+//=========================
+// BONUS
+//=========================
+
+function updateArtifactBonus(){
+
+    for(
+
+        const a of
+
+        ArtifactSystem.equipped
+
+    ){
+
+        if(!a)continue;
+
+        Player.attack+=a.attack;
+
+        Player.defense+=a.defense;
+
+        Player.maxHp+=a.hp;
+
+        Player.critRate=
+
+        (Player.critRate||0)+
+
+        a.crit;
+
+        Player.critDamage=
+
+        (Player.critDamage||0)+
+
+        a.critDamage;
+
+        Player.lifeSteal=
+
+        (Player.lifeSteal||0)+
+
+        a.lifeSteal;
+
+    }
+
+}
+
+//=========================
+// LEVEL
+//=========================
+
+function artifactGainExp(
+
+art,
+
+exp
+
+){
+
+    art.exp+=exp;
+
+    while(
+
+        art.exp>=
+
+        art.nextExp&&
+
+        art.level<
+
+        ArtifactSystem.maxLevel
+
+    ){
+
+        art.exp-=
+
+        art.nextExp;
+
+        art.level++;
+
+        art.nextExp=
+
+        Math.floor(
+
+            art.nextExp*1.25
+
+        );
+
+        art.attack+=4;
+
+        art.defense+=3;
+
+        art.hp+=35;
+
+        art.crit+=0.25;
+
+    }
+
+}
+
+//=========================
+// DROP
+//=========================
+
+function artifactDrop(){
+
+    if(
+
+        Math.random()>0.004
+
+    )return;
+
+    const slots=[
+
+        "Core",
+
+        "Heart",
+
+        "Soul",
+
+        "Eye",
+
+        "Crown",
+
+        "Relic"
+
+    ];
+
+    const names=[
+
+        "Flame Core",
+
+        "Frozen Heart",
+
+        "Dragon Soul",
+
+        "Eye Of Wind",
+
+        "King Crown",
+
+        "Ancient Relic"
+
+    ];
+
+    const rarities=[
+
+        "Rare",
+
+        "Epic",
+
+        "Legendary",
+
+        "Mythic"
+
+    ];
+
+    const a=createArtifact(
+
+        names[
+
+            Math.floor(
+
+                Math.random()*
+
+                names.length
+
+            )
+
+        ],
+
+        rarities[
+
+            Math.floor(
+
+                Math.random()*
+
+                rarities.length
+
+            )
+
+        ],
+
+        slots[
+
+            Math.floor(
+
+                Math.random()*
+
+                slots.length
+
+            )
+
+        ]
+
+    );
+
+    a.attack=
+
+    20+
+
+    Math.random()*20;
+
+    a.defense=
+
+    10+
+
+    Math.random()*15;
+
+    a.hp=
+
+    100+
+
+    Math.random()*200;
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawArtifactUI(){
+
+    if(
+
+        !ArtifactSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.9)";
+
+    ctx.fillRect(
+
+        120,
+
+        50,
+
+        760,
+
+        560
+
+    );
+
+    ctx.strokeStyle="#00ffff";
+
+    ctx.strokeRect(
+
+        120,
+
+        50,
+
+        760,
+
+        560
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.font="26px Arial";
+
+    ctx.fillText(
+
+        "Artifacts",
+
+        160,
+
+        90
+
+    );
+
+    let y=140;
+
+    ctx.font="18px Arial";
+
+    for(
+
+        const a of
+
+        ArtifactSystem.list
+
+    ){
+
+        ctx.fillStyle="gold";
+
+        ctx.fillText(
+
+            a.name,
+
+            160,
+
+            y
+
+        );
+
+        ctx.fillStyle="white";
+
+        ctx.fillText(
+
+            a.slot,
+
+            360,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            "Lv."+a.level,
+
+            500,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            a.rarity,
+
+            620,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// HOTKEY
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="b"
+
+    ){
+
+        ArtifactSystem.open=
+
+        !ArtifactSystem.open;
+
+    }
+
+);
+
+//=========================
+// DEFAULT
+//=========================
+
+const starter=createArtifact(
+
+"Flame Core",
+
+"Rare",
+
+"Core"
+
+);
+
+starter.attack=20;
+
+starter.hp=120;
+
+equipArtifact(
+
+starter.id
+
+);
+
+//=========================
+// UPDATE
+//=========================
+
+function updateArtifacts(dt){
+
+    for(
+
+        const a of
+
+        ArtifactSystem.equipped
+
+    ){
+
+        if(a)
+
+        artifactGainExp(
+
+            a,
+
+            dt*3
+
+        );
+
+    }
+
+    updateArtifactBonus();
+
+}
+            //=========================
+// TALENT TREE SYSTEM
+//=========================
+
+const TalentSystem={
+
+    open:false,
+
+    points:0,
+
+    spent:0,
+
+    trees:{
+
+        Warrior:[],
+
+        Ranger:[],
+
+        Mage:[]
+
+    }
+
+};
+
+//=========================
+// TALENT
+//=========================
+
+class Talent{
+
+    constructor(
+
+        name,
+
+        maxLevel,
+
+        bonus
+
+    ){
+
+        this.name=name;
+
+        this.level=0;
+
+        this.maxLevel=maxLevel;
+
+        this.bonus=bonus;
+
+    }
+
+}
+
+//=========================
+// CREATE TALENTS
+//=========================
+
+TalentSystem.trees.Warrior.push(
+
+new Talent(
+
+"Power Strike",
+
+20,
+
+{attack:5}
+
+));
+
+TalentSystem.trees.Warrior.push(
+
+new Talent(
+
+"Iron Body",
+
+20,
+
+{hp:50}
+
+));
+
+TalentSystem.trees.Warrior.push(
+
+new Talent(
+
+"Critical Master",
+
+10,
+
+{crit:1}
+
+));
+
+TalentSystem.trees.Warrior.push(
+
+new Talent(
+
+"Battle Rage",
+
+10,
+
+{atkPercent:2}
+
+));
+
+TalentSystem.trees.Warrior.push(
+
+new Talent(
+
+"Guardian",
+
+10,
+
+{defense:5}
+
+));
+
+//=========================
+// LEVEL BONUS
+//=========================
+
+function updateTalentPoints(){
+
+    TalentSystem.points=
+
+        Math.floor(
+
+            Player.level/5
+
+        )-
+
+        TalentSystem.spent;
+
+}
+
+//=========================
+// LEARN
+//=========================
+
+function learnTalent(index){
+
+    const list=
+
+    TalentSystem.trees.Warrior;
+
+    const talent=
+
+    list[index];
+
+    if(!talent)return;
+
+    if(
+
+        TalentSystem.points<=0
+
+    )return;
+
+    if(
+
+        talent.level>=
+
+        talent.maxLevel
+
+    )return;
+
+    talent.level++;
+
+    TalentSystem.points--;
+
+    TalentSystem.spent++;
+
+}
+
+//=========================
+// BONUS
+//=========================
+
+function updateTalentBonus(){
+
+    for(
+
+        const talent
+
+        of TalentSystem.trees.Warrior
+
+    ){
+
+        if(
+
+            talent.level==0
+
+        )continue;
+
+        const b=
+
+        talent.bonus;
+
+        if(
+
+            b.attack
+
+        )
+
+        Player.attack+=
+
+        b.attack*
+
+        talent.level;
+
+        if(
+
+            b.hp
+
+        )
+
+        Player.maxHp+=
+
+        b.hp*
+
+        talent.level;
+
+        if(
+
+            b.defense
+
+        )
+
+        Player.defense+=
+
+        b.defense*
+
+        talent.level;
+
+        if(
+
+            b.crit
+
+        )
+
+        Player.critRate=
+
+        (Player.critRate||0)+
+
+        b.crit*
+
+        talent.level;
+
+        if(
+
+            b.atkPercent
+
+        )
+
+        Player.attack*=
+
+        1+
+
+        (
+
+            b.atkPercent*
+
+            talent.level
+
+        )/100;
+
+    }
+
+}
+
+//=========================
+// UI
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="p"
+
+    ){
+
+        TalentSystem.open=
+
+        !TalentSystem.open;
+
+    }
+
+});
+
+function drawTalentUI(){
+
+    if(
+
+        !TalentSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.90)";
+
+    ctx.fillRect(
+
+        80,
+
+        40,
+
+        840,
+
+        620
+
+    );
+
+    ctx.strokeStyle="#00ff88";
+
+    ctx.strokeRect(
+
+        80,
+
+        40,
+
+        840,
+
+        620
+
+    );
+
+    ctx.fillStyle="white";
+
+    ctx.font="30px Arial";
+
+    ctx.fillText(
+
+        "Talent Tree",
+
+        120,
+
+        80
+
+    );
+
+    ctx.font="18px Arial";
+
+    ctx.fillText(
+
+        "Talent Points : "+
+
+        TalentSystem.points,
+
+        120,
+
+        120
+
+    );
+
+    let y=170;
+
+    for(
+
+        let i=0;
+
+        i<
+
+        TalentSystem
+
+        .trees
+
+        .Warrior
+
+        .length;
+
+        i++
+
+    ){
+
+        const t=
+
+        TalentSystem
+
+        .trees
+
+        .Warrior[i];
+
+        ctx.fillStyle="gold";
+
+        ctx.fillText(
+
+            t.name,
+
+            130,
+
+            y
+
+        );
+
+        ctx.fillStyle="white";
+
+        ctx.fillText(
+
+            t.level+
+
+            "/"+
+
+            t.maxLevel,
+
+            420,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            "[ "+i+" ]",
+
+            560,
+
+            y
+
+        );
+
+        y+=45;
+
+    }
+
+}
+
+//=========================
+// HOTKEY
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    const n=
+
+    parseInt(e.key);
+
+    if(
+
+        isNaN(n)
+
+    )return;
+
+    if(
+
+        TalentSystem.open
+
+    ){
+
+        learnTalent(n);
+
+    }
+
+});
+
+//=========================
+// RESET
+//=========================
+
+function resetTalent(){
+
+    Player.gold-=50000;
+
+    TalentSystem.points=
+
+    TalentSystem.spent;
+
+    TalentSystem.spent=0;
+
+    for(
+
+        const t
+
+        of TalentSystem.trees.Warrior
+
+    ){
+
+        t.level=0;
+
+    }
+
+}
+
+//=========================
+// UPDATE
+//=========================
+
+function updateTalent(){
+
+    updateTalentPoints();
+
+    updateTalentBonus();
+
+}
+            //=========================
+// RELIC SYSTEM
+//=========================
+
+const RelicSystem={
+
+    open:false,
+
+    slots:[
+
+        null,
+
+        null,
+
+        null,
+
+        null
+
+    ],
+
+    inventory:[],
+
+    maxLevel:30
+
+};
+
+//=========================
+// RELIC CLASS
+//=========================
+
+class Relic{
+
+    constructor(name){
+
+        this.id=Date.now()+Math.random();
+
+        this.name=name;
+
+        this.level=1;
+
+        this.exp=0;
+
+        this.nextExp=500;
+
+        this.rarity="Rare";
+
+        this.attack=0;
+
+        this.defense=0;
+
+        this.hp=0;
+
+        this.crit=0;
+
+        this.skillDamage=0;
+
+        this.bossDamage=0;
+
+    }
+
+}
+
+//=========================
+// CREATE RELIC
+//=========================
+
+function createRelic(
+
+name,
+
+rarity
+
+){
+
+    const r=new Relic(name);
+
+    r.rarity=rarity;
+
+    r.attack=25+Math.floor(Math.random()*15);
+
+    r.defense=15+Math.floor(Math.random()*10);
+
+    r.hp=250+Math.floor(Math.random()*150);
+
+    r.crit=2;
+
+    r.skillDamage=3;
+
+    r.bossDamage=5;
+
+    RelicSystem.inventory.push(r);
+
+    return r;
+
+}
+
+//=========================
+// EQUIP
+//=========================
+
+function equipRelic(id){
+
+    const relic=
+
+    RelicSystem.inventory.find(
+
+        r=>r.id==id
+
+    );
+
+    if(!relic)return;
+
+    for(
+
+        let i=0;
+
+        i<
+
+        RelicSystem.slots.length;
+
+        i++
+
+    ){
+
+        if(
+
+            RelicSystem.slots[i]==null
+
+        ){
+
+            RelicSystem.slots[i]=relic;
+
+            return;
+
+        }
+
+    }
+
+}
+
+//=========================
+// UNEQUIP
+//=========================
+
+function unequipRelic(slot){
+
+    if(
+
+        slot<0||
+
+        slot>=4
+
+    )return;
+
+    RelicSystem.slots[slot]=null;
+
+}
+
+//=========================
+// BONUS
+//=========================
+
+function updateRelicBonus(){
+
+    for(
+
+        const relic of
+
+        RelicSystem.slots
+
+    ){
+
+        if(!relic)continue;
+
+        Player.attack+=
+
+        relic.attack;
+
+        Player.defense+=
+
+        relic.defense;
+
+        Player.maxHp+=
+
+        relic.hp;
+
+        Player.critRate=
+
+        (Player.critRate||0)+
+
+        relic.crit;
+
+        Player.skillDamage=
+
+        (Player.skillDamage||0)+
+
+        relic.skillDamage;
+
+        Player.bossDamage=
+
+        (Player.bossDamage||0)+
+
+        relic.bossDamage;
+
+    }
+
+}
+
+//=========================
+// LEVEL UP
+//=========================
+
+function relicGainExp(
+
+relic,
+
+exp
+
+){
+
+    relic.exp+=exp;
+
+    while(
+
+        relic.exp>=
+
+        relic.nextExp&&
+
+        relic.level<
+
+        RelicSystem.maxLevel
+
+    ){
+
+        relic.exp-=
+
+        relic.nextExp;
+
+        relic.level++;
+
+        relic.nextExp=
+
+        Math.floor(
+
+            relic.nextExp*1.35
+
+        );
+
+        relic.attack+=6;
+
+        relic.defense+=4;
+
+        relic.hp+=80;
+
+        relic.crit+=0.4;
+
+        relic.skillDamage+=0.5;
+
+    }
+
+}
+
+//=========================
+// RANDOM DROP
+//=========================
+
+function relicDrop(){
+
+    if(
+
+        Math.random()>
+
+        0.002
+
+    )return;
+
+    const names=[
+
+        "Sun Relic",
+
+        "Moon Relic",
+
+        "Chaos Relic",
+
+        "Holy Relic",
+
+        "Dragon Relic",
+
+        "Void Relic"
+
+    ];
+
+    const rarities=[
+
+        "Epic",
+
+        "Legendary",
+
+        "Mythic"
+
+    ];
+
+    createRelic(
+
+        names[
+
+            Math.floor(
+
+                Math.random()*
+
+                names.length
+
+            )
+
+        ],
+
+        rarities[
+
+            Math.floor(
+
+                Math.random()*
+
+                rarities.length
+
+            )
+
+        ]
+
+    );
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawRelicUI(){
+
+    if(
+
+        !RelicSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.92)";
+
+    ctx.fillRect(
+
+        140,
+
+        60,
+
+        720,
+
+        520
+
+    );
+
+    ctx.strokeStyle="#ff8800";
+
+    ctx.strokeRect(
+
+        140,
+
+        60,
+
+        720,
+
+        520
+
+    );
+
+    ctx.fillStyle="gold";
+
+    ctx.font="28px Arial";
+
+    ctx.fillText(
+
+        "Relics",
+
+        180,
+
+        100
+
+    );
+
+    let y=150;
+
+    ctx.font="18px Arial";
+
+    for(
+
+        const relic of
+
+        RelicSystem.inventory
+
+    ){
+
+        ctx.fillStyle="white";
+
+        ctx.fillText(
+
+            relic.name,
+
+            180,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            relic.rarity,
+
+            420,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            "Lv."+relic.level,
+
+            560,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// HOTKEY
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="r"
+
+    ){
+
+        RelicSystem.open=
+
+        !RelicSystem.open;
+
+    }
+
+});
+
+//=========================
+// DEFAULT
+//=========================
+
+const relic=createRelic(
+
+"Sun Relic",
+
+"Epic"
+
+);
+
+equipRelic(
+
+relic.id
+
+);
+
+//=========================
+// UPDATE
+//=========================
+
+function updateRelic(dt){
+
+    for(
+
+        const relic of
+
+        RelicSystem.slots
+
+    ){
+
+        if(
+
+            relic
+
+        ){
+
+            relicGainExp(
+
+                relic,
+
+                dt*5
+
+            );
+
+        }
+
+    }
+
+    updateRelicBonus();
+
+}
+            //=========================
+// TITLE SYSTEM
+//=========================
+
+const TitleSystem={
+
+    open:false,
+
+    owned:[],
+
+    equipped:null
+
+};
+
+//=========================
+// TITLE CLASS
+//=========================
+
+class Title{
+
+    constructor(name){
+
+        this.id=Date.now()+Math.random();
+
+        this.name=name;
+
+        this.unlock=false;
+
+        this.attack=0;
+
+        this.defense=0;
+
+        this.hp=0;
+
+        this.crit=0;
+
+        this.moveSpeed=0;
+
+        this.dropRate=0;
+
+        this.expRate=0;
+
+    }
+
+}
+
+//=========================
+// CREATE TITLE
+//=========================
+
+function createTitle(
+
+name,
+
+stats={}
+
+){
+
+    const t=new Title(name);
+
+    Object.assign(t,stats);
+
+    TitleSystem.owned.push(t);
+
+    return t;
+
+}
+
+//=========================
+// UNLOCK
+//=========================
+
+function unlockTitle(name){
+
+    const t=
+
+    TitleSystem.owned.find(
+
+        a=>a.name==name
+
+    );
+
+    if(t){
+
+        t.unlock=true;
+
+    }
+
+}
+
+//=========================
+// EQUIP
+//=========================
+
+function equipTitle(id){
+
+    const t=
+
+    TitleSystem.owned.find(
+
+        a=>a.id==id
+
+    );
+
+    if(
+
+        !t||
+
+        !t.unlock
+
+    )return;
+
+    TitleSystem.equipped=t;
+
+}
+
+//=========================
+// BONUS
+//=========================
+
+function updateTitleBonus(){
+
+    const t=
+
+    TitleSystem.equipped;
+
+    if(!t)return;
+
+    Player.attack+=t.attack;
+
+    Player.defense+=t.defense;
+
+    Player.maxHp+=t.hp;
+
+    Player.moveSpeed+=
+
+    t.moveSpeed;
+
+    Player.critRate=
+
+    (Player.critRate||0)+
+
+    t.crit;
+
+    Player.dropRate=
+
+    (Player.dropRate||0)+
+
+    t.dropRate;
+
+    Player.expRate=
+
+    (Player.expRate||0)+
+
+    t.expRate;
+
+}
+
+//=========================
+// AUTO UNLOCK
+//=========================
+
+function checkTitles(){
+
+    if(
+
+        Player.level>=10
+
+    ){
+
+        unlockTitle(
+
+            "Novice Hero"
+
+        );
+
+    }
+
+    if(
+
+        Player.level>=50
+
+    ){
+
+        unlockTitle(
+
+            "Elite Hunter"
+
+        );
+
+    }
+
+    if(
+
+        Player.level>=100
+
+    ){
+
+        unlockTitle(
+
+            "Wind Champion"
+
+        );
+
+    }
+
+    if(
+
+        Player.kill>=1000
+
+    ){
+
+        unlockTitle(
+
+            "Monster Slayer"
+
+        );
+
+    }
+
+    if(
+
+        Player.kill>=10000
+
+    ){
+
+        unlockTitle(
+
+            "Legend Killer"
+
+        );
+
+    }
+
+    if(
+
+        WorldBoss.kill>=1
+
+    ){
+
+        unlockTitle(
+
+            "Dragon Conqueror"
+
+        );
+
+    }
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawTitleUI(){
+
+    if(
+
+        !TitleSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.92)";
+
+    ctx.fillRect(
+
+        120,
+
+        60,
+
+        760,
+
+        540
+
+    );
+
+    ctx.strokeStyle="#FFD700";
+
+    ctx.strokeRect(
+
+        120,
+
+        60,
+
+        760,
+
+        540
+
+    );
+
+    ctx.fillStyle="gold";
+
+    ctx.font="28px Arial";
+
+    ctx.fillText(
+
+        "Titles",
+
+        160,
+
+        100
+
+    );
+
+    let y=150;
+
+    ctx.font="18px Arial";
+
+    for(
+
+        const t of
+
+        TitleSystem.owned
+
+    ){
+
+        ctx.fillStyle=
+
+        t.unlock?
+
+        "white":
+
+        "gray";
+
+        ctx.fillText(
+
+            t.name,
+
+            170,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            t.unlock?
+
+            "Unlocked":
+
+            "Locked",
+
+            500,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// NAME DRAW
+//=========================
+
+function drawPlayerTitle(){
+
+    if(
+
+        !TitleSystem.equipped
+
+    )return;
+
+    ctx.fillStyle="#FFD700";
+
+    ctx.font="14px Arial";
+
+    ctx.fillText(
+
+        "["+
+
+        TitleSystem.equipped.name+
+
+        "]",
+
+        Player.x-30,
+
+        Player.y-35
+
+    );
+
+}
+
+//=========================
+// HOTKEY
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="y"
+
+    ){
+
+        TitleSystem.open=
+
+        !TitleSystem.open;
+
+    }
+
+});
+
+//=========================
+// DEFAULT TITLES
+//=========================
+
+const novice=createTitle(
+
+"Novice Hero",
+
+{
+
+attack:5,
+
+hp:50
+
+}
+
+);
+
+const hunter=createTitle(
+
+"Elite Hunter",
+
+{
+
+attack:25,
+
+crit:2,
+
+dropRate:5
+
+}
+
+);
+
+const champion=createTitle(
+
+"Wind Champion",
+
+{
+
+attack:60,
+
+hp:300,
+
+crit:5,
+
+expRate:10
+
+}
+
+);
+
+const dragon=createTitle(
+
+"Dragon Conqueror",
+
+{
+
+attack:120,
+
+hp:1000,
+
+crit:8,
+
+dropRate:15,
+
+expRate:15
+
+}
+
+);
+
+//=========================
+// UPDATE
+//=========================
+
+function updateTitle(){
+
+    checkTitles();
+
+    updateTitleBonus();
+
+}
+            //=========================
+// ACHIEVEMENT SYSTEM
+//=========================
+
+const AchievementSystem={
+
+    open:false,
+
+    list:[]
+
+};
+
+//=========================
+// ACHIEVEMENT
+//=========================
+
+class Achievement{
+
+    constructor(
+
+        id,
+
+        name,
+
+        target,
+
+        reward
+
+    ){
+
+        this.id=id;
+
+        this.name=name;
+
+        this.target=target;
+
+        this.reward=reward;
+
+        this.progress=0;
+
+        this.complete=false;
+
+        this.claimed=false;
+
+    }
+
+}
+
+//=========================
+// CREATE
+//=========================
+
+function addAchievement(
+
+id,
+
+name,
+
+target,
+
+reward
+
+){
+
+    AchievementSystem.list.push(
+
+        new Achievement(
+
+            id,
+
+            name,
+
+            target,
+
+            reward
+
+        )
+
+    );
+
+}
+
+//=========================
+// PROGRESS
+//=========================
+
+function achievementProgress(
+
+id,
+
+value=1
+
+){
+
+    const a=
+
+    AchievementSystem.list.find(
+
+        x=>x.id==id
+
+    );
+
+    if(
+
+        !a||
+
+        a.complete
+
+    )return;
+
+    a.progress+=value;
+
+    if(
+
+        a.progress>=a.target
+
+    ){
+
+        a.progress=
+
+        a.target;
+
+        a.complete=true;
+
+    }
+
+}
+
+//=========================
+// CLAIM
+//=========================
+
+function claimAchievement(
+
+id
+
+){
+
+    const a=
+
+    AchievementSystem.list.find(
+
+        x=>x.id==id
+
+    );
+
+    if(
+
+        !a||
+
+        !a.complete||
+
+        a.claimed
+
+    )return;
+
+    a.claimed=true;
+
+    Player.gold+=
+
+    a.reward.gold||0;
+
+    Player.exp+=
+
+    a.reward.exp||0;
+
+    if(
+
+        a.reward.item
+
+    ){
+
+        Inventory.add(
+
+            structuredClone(
+
+                a.reward.item
+
+            )
+
+        );
+
+    }
+
+}
+
+//=========================
+// DRAW
+//=========================
+
+function drawAchievementUI(){
+
+    if(
+
+        !AchievementSystem.open
+
+    )return;
+
+    ctx.fillStyle=
+
+    "rgba(0,0,0,.92)";
+
+    ctx.fillRect(
+
+        80,
+
+        40,
+
+        860,
+
+        620
+
+    );
+
+    ctx.strokeStyle="#00FFAA";
+
+    ctx.strokeRect(
+
+        80,
+
+        40,
+
+        860,
+
+        620
+
+    );
+
+    ctx.fillStyle="gold";
+
+    ctx.font="28px Arial";
+
+    ctx.fillText(
+
+        "Achievements",
+
+        120,
+
+        80
+
+    );
+
+    let y=130;
+
+    ctx.font="18px Arial";
+
+    for(
+
+        const a of
+
+        AchievementSystem.list
+
+    ){
+
+        ctx.fillStyle=
+
+        a.complete?
+
+        "#00ff66":
+
+        "white";
+
+        ctx.fillText(
+
+            a.name,
+
+            120,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            a.progress+
+
+            "/"+
+
+            a.target,
+
+            420,
+
+            y
+
+        );
+
+        ctx.fillText(
+
+            a.claimed?
+
+            "Claimed":
+
+            (
+
+                a.complete?
+
+                "Complete":
+
+                "In Progress"
+
+            ),
+
+            620,
+
+            y
+
+        );
+
+        y+=28;
+
+    }
+
+}
+
+//=========================
+// HOTKEY
+//=========================
+
+window.addEventListener(
+
+"keydown",
+
+e=>{
+
+    if(
+
+        e.key.toLowerCase()=="j"
+
+    ){
+
+        AchievementSystem.open=
+
+        !AchievementSystem.open;
+
+    }
+
+});
+
+//=========================
+// DEFAULT ACHIEVEMENTS
+//=========================
+
+addAchievement(
+
+"kill100",
+
+"Monster Hunter I",
+
+100,
+
+{
+
+gold:5000,
+
+exp:3000
+
+}
+
+);
+
+addAchievement(
+
+"kill1000",
+
+"Monster Hunter II",
+
+1000,
+
+{
+
+gold:25000,
+
+exp:12000
+
+}
+
+);
+
+addAchievement(
+
+"level10",
+
+"Reach Level 10",
+
+10,
+
+{
+
+gold:3000,
+
+exp:2000
+
+}
+
+);
+
+addAchievement(
+
+"level50",
+
+"Reach Level 50",
+
+50,
+
+{
+
+gold:30000,
+
+exp:15000
+
+}
+
+);
+
+addAchievement(
+
+"boss10",
+
+"Boss Destroyer",
+
+10,
+
+{
+
+gold:50000,
+
+exp:30000,
+
+item:generateEquipment(
+
+50
+
+)
+
+}
+
+);
+
+addAchievement(
+
+"dungeon50",
+
+"Dungeon Explorer",
+
+50,
+
+{
+
+gold:60000,
+
+exp:35000
+
+}
+
+);
+
+addAchievement(
+
+"tower100",
+
+"Tower Challenger",
+
+100,
+
+{
+
+gold:100000,
+
+exp:80000,
+
+item:generateEquipment(
+
+80
+
+)
+
+}
+
+);
+
+//=========================
+// AUTO UPDATE
+//=========================
+
+function updateAchievement(){
+
+    achievementProgress(
+
+        "kill100",
+
+        Player.kill-
+
+        (
+
+            AchievementSystem
+
+            .kill100Last||0
+
+        )
+
+    );
+
+    AchievementSystem
+
+    .kill100Last=
+
+    Player.kill;
+
+}
