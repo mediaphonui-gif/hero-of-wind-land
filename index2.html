@@ -2218,3 +2218,6285 @@ if (
 //================================================
 // END FISHING SYSTEM V20
 //================================================
+// js/systems/mining.js
+//================================================
+// HERO OF WIND LAND
+// MINING SYSTEM V21
+//================================================
+
+const MiningSystemV21 = {
+    enabled: true,
+    nodes: new Map(),
+    ores: new Map(),
+    activeSessions: new Map(),
+
+    statistics: {
+        swings: 0,
+        successfulMines: 0,
+        failedMines: 0,
+        criticalMines: 0,
+        rareOres: 0,
+        totalOres: 0,
+        totalValue: 0
+    },
+
+    config: {
+        baseMineTime: 1800,
+        minMineTime: 350,
+        maxMineTime: 6000,
+        criticalChance: 0.08,
+        criticalMultiplier: 2,
+        defaultRespawn: 120000
+    }
+};
+
+
+//================================================
+// ORE RARITY
+//================================================
+
+const OreRarityV21 = {
+    COMMON: "common",
+    UNCOMMON: "uncommon",
+    RARE: "rare",
+    EPIC: "epic",
+    LEGENDARY: "legendary",
+    MYTHIC: "mythic"
+};
+
+
+//================================================
+// ORE CLASS
+//================================================
+
+class OreItemV21 {
+
+    constructor(config = {}) {
+        this.id = config.id ||
+            "ore_" + Math.random().toString(36).slice(2);
+
+        this.name = config.name || "Unknown Ore";
+
+        this.rarity = config.rarity ||
+            OreRarityV21.COMMON;
+
+        this.requiredLevel = Math.max(
+            1,
+            Number(config.requiredLevel) || 1
+        );
+
+        this.minAmount = Math.max(
+            1,
+            Number(config.minAmount) || 1
+        );
+
+        this.maxAmount = Math.max(
+            this.minAmount,
+            Number(config.maxAmount) || this.minAmount
+        );
+
+        this.value = Math.max(
+            0,
+            Number(config.value) || 1
+        );
+
+        this.exp = Math.max(
+            0,
+            Number(config.exp) || 1
+        );
+
+        this.description = config.description || "";
+    }
+
+}
+
+
+//================================================
+// MINING NODE CLASS
+//================================================
+
+class MiningNodeV21 {
+
+    constructor(id, config = {}) {
+        this.id = id;
+        this.name = config.name || "Ore Vein";
+
+        this.x = Number(config.x) || 0;
+        this.y = Number(config.y) || 0;
+
+        this.radius = Math.max(
+            20,
+            Number(config.radius) || 40
+        );
+
+        this.requiredLevel = Math.max(
+            1,
+            Number(config.requiredLevel) || 1
+        );
+
+        this.oreTable = Array.isArray(config.oreTable)
+            ? [...config.oreTable]
+            : [];
+
+        this.maxDurability = Math.max(
+            1,
+            Number(config.maxDurability) || 5
+        );
+
+        this.durability = Number.isFinite(
+            Number(config.durability)
+        )
+            ? Math.max(0, Number(config.durability))
+            : this.maxDurability;
+
+        this.depleted = this.durability <= 0;
+
+        this.respawnTime = Math.max(
+            1000,
+            Number(config.respawnTime) ||
+            MiningSystemV21.config.defaultRespawn
+        );
+
+        this.respawnAt =
+            Number(config.respawnAt) || 0;
+    }
+
+}
+
+
+//================================================
+// REGISTER ORE
+//================================================
+
+function registerOreV21(config) {
+    const ore = config instanceof OreItemV21
+        ? config
+        : new OreItemV21(config);
+
+    MiningSystemV21.ores.set(
+        ore.id,
+        ore
+    );
+
+    return ore;
+}
+
+
+//================================================
+// GET ORE
+//================================================
+
+function getOreV21(id) {
+    return MiningSystemV21.ores.get(id) || null;
+}
+
+
+//================================================
+// REGISTER MINING NODE
+//================================================
+
+function registerMiningNodeV21(config) {
+
+    if (!config || !config.id) {
+        return null;
+    }
+
+    const node = config instanceof MiningNodeV21
+        ? config
+        : new MiningNodeV21(
+            config.id,
+            config
+        );
+
+    MiningSystemV21.nodes.set(
+        node.id,
+        node
+    );
+
+    return node;
+}
+
+
+//================================================
+// GET MINING NODE
+//================================================
+
+function getMiningNodeV21(id) {
+    return MiningSystemV21.nodes.get(id) || null;
+}
+
+
+//================================================
+// GET PLAYER
+//================================================
+
+function getMiningPlayerV21() {
+    return typeof getPlayerSkillCaster === "function"
+        ? getPlayerSkillCaster()
+        : null;
+}
+
+
+//================================================
+// MINING LEVEL
+//================================================
+
+function getMiningLevelV21() {
+    const player = getMiningPlayerV21();
+
+    if (!player) {
+        return 1;
+    }
+
+    return Math.max(
+        1,
+        Number(player.miningLevel) ||
+        Number(player.gatheringLevel) ||
+        Number(player.level) ||
+        1
+    );
+}
+
+
+//================================================
+// MINING POWER
+//================================================
+
+function getMiningPowerV21() {
+    const player = getMiningPlayerV21();
+
+    if (!player) {
+        return 1;
+    }
+
+    return Math.max(
+        1,
+        Number(player.miningPower) ||
+        Number(player.strength) ||
+        Number(player.attack) ||
+        1
+    );
+}
+
+
+//================================================
+// MINING LUCK
+//================================================
+
+function getMiningLuckV21() {
+    const player = getMiningPlayerV21();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.miningLuck) ||
+        Number(player.luck) ||
+        0
+    );
+}
+
+
+//================================================
+// PICKAXE CHECK
+//================================================
+
+function hasPickaxeV21() {
+
+    if (
+        typeof getInventoryItemCountV9 !==
+        "function"
+    ) {
+        return true;
+    }
+
+    const pickaxes = [
+        "wooden_pickaxe",
+        "stone_pickaxe",
+        "iron_pickaxe",
+        "steel_pickaxe",
+        "golden_pickaxe",
+        "crystal_pickaxe",
+        "mythic_pickaxe",
+        "pickaxe"
+    ];
+
+    for (const pickaxe of pickaxes) {
+        if (
+            getInventoryItemCountV9(pickaxe) > 0
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+//================================================
+// UPDATE NODE
+//================================================
+
+function updateMiningNodeV21(node) {
+
+    if (!node) {
+        return null;
+    }
+
+    if (!node.depleted) {
+        return node;
+    }
+
+    if (Date.now() >= node.respawnAt) {
+        node.durability = node.maxDurability;
+        node.depleted = false;
+        node.respawnAt = 0;
+    }
+
+    return node;
+}
+
+
+//================================================
+// SELECT ORE
+//================================================
+
+function selectOreV21(node) {
+
+    if (!node) {
+        return null;
+    }
+
+    const level = getMiningLevelV21();
+    const luck = getMiningLuckV21();
+    const candidates = [];
+
+    for (const entry of node.oreTable) {
+
+        const ore = getOreV21(entry.id);
+
+        if (!ore) {
+            continue;
+        }
+
+        if (level < ore.requiredLevel) {
+            continue;
+        }
+
+        let weight = Math.max(
+            0,
+            Number(entry.weight) || 1
+        );
+
+        if (
+            ore.rarity !== OreRarityV21.COMMON
+        ) {
+            weight *= 1 + luck * 0.002;
+        }
+
+        candidates.push({
+            ore,
+            weight
+        });
+    }
+
+    if (!candidates.length) {
+        return null;
+    }
+
+    const totalWeight =
+        candidates.reduce(
+            (sum, entry) =>
+                sum + entry.weight,
+            0
+        );
+
+    let roll = Math.random() * totalWeight;
+
+    for (const entry of candidates) {
+        roll -= entry.weight;
+
+        if (roll <= 0) {
+            return entry.ore;
+        }
+    }
+
+    return candidates[
+        candidates.length - 1
+    ].ore;
+}
+
+
+//================================================
+// CALCULATE MINING TIME
+//================================================
+
+function getMiningTimeV21() {
+
+    const power = getMiningPowerV21();
+
+    const time =
+        MiningSystemV21.config.baseMineTime /
+        (
+            1 +
+            power * 0.05
+        );
+
+    return Math.max(
+        MiningSystemV21.config.minMineTime,
+        Math.min(
+            MiningSystemV21.config.maxMineTime,
+            time
+        )
+    );
+}
+
+
+//================================================
+// START MINING
+//================================================
+
+function startMiningV21(nodeId) {
+
+    const node = getMiningNodeV21(nodeId);
+
+    if (!node) {
+        MiningSystemV21.statistics.failedMines++;
+
+        return {
+            success: false,
+            reason: "node_not_found"
+        };
+    }
+
+    updateMiningNodeV21(node);
+
+    if (node.depleted) {
+        return {
+            success: false,
+            reason: "node_depleted",
+            respawnAt: node.respawnAt
+        };
+    }
+
+    if (
+        getMiningLevelV21() <
+        node.requiredLevel
+    ) {
+        return {
+            success: false,
+            reason: "level_too_low"
+        };
+    }
+
+    if (!hasPickaxeV21()) {
+        return {
+            success: false,
+            reason: "pickaxe_missing"
+        };
+    }
+
+    if (
+        MiningSystemV21.activeSessions.has(nodeId)
+    ) {
+        return {
+            success: false,
+            reason: "already_mining"
+        };
+    }
+
+    const ore = selectOreV21(node);
+
+    if (!ore) {
+        return {
+            success: false,
+            reason: "no_available_ore"
+        };
+    }
+
+    const now = Date.now();
+    const duration = getMiningTimeV21();
+
+    const session = {
+        nodeId,
+        oreId: ore.id,
+        startedAt: now,
+        finishAt: now + duration,
+        duration,
+        completed: false
+    };
+
+    MiningSystemV21.activeSessions.set(
+        nodeId,
+        session
+    );
+
+    MiningSystemV21.statistics.swings++;
+
+    return {
+        success: true,
+        nodeId,
+        oreId: ore.id,
+        finishAt: session.finishAt,
+        duration
+    };
+}
+
+
+//================================================
+// UPDATE MINING SESSION
+//================================================
+
+function updateMiningV21(nodeId) {
+
+    const session =
+        MiningSystemV21.activeSessions.get(nodeId);
+
+    if (!session) {
+        return null;
+    }
+
+    const remaining = Math.max(
+        0,
+        session.finishAt - Date.now()
+    );
+
+    if (remaining <= 0) {
+        session.completed = true;
+    }
+
+    return {
+        ...session,
+        remaining,
+        ready: remaining <= 0
+    };
+}
+
+
+//================================================
+// COMPLETE MINING
+//================================================
+
+function completeMiningV21(nodeId) {
+
+    const session =
+        MiningSystemV21.activeSessions.get(nodeId);
+
+    if (!session) {
+        return {
+            success: false,
+            reason: "no_active_session"
+        };
+    }
+
+    if (Date.now() < session.finishAt) {
+        return {
+            success: false,
+            reason: "mining_not_finished",
+            remaining:
+                session.finishAt - Date.now()
+        };
+    }
+
+    const node = getMiningNodeV21(nodeId);
+    const ore = getOreV21(session.oreId);
+
+    MiningSystemV21.activeSessions.delete(nodeId);
+
+    if (!node || !ore) {
+        MiningSystemV21.statistics.failedMines++;
+
+        return {
+            success: false,
+            reason: "mining_data_missing"
+        };
+    }
+
+    const luck = getMiningLuckV21();
+
+    const criticalChance = Math.min(
+        0.5,
+        MiningSystemV21.config.criticalChance +
+        luck * 0.003
+    );
+
+    const critical =
+        Math.random() < criticalChance;
+
+    let amount =
+        ore.minAmount +
+        Math.floor(
+            Math.random() *
+            (
+                ore.maxAmount -
+                ore.minAmount +
+                1
+            )
+        );
+
+    if (critical) {
+        amount *=
+            MiningSystemV21.config.criticalMultiplier;
+
+        MiningSystemV21.statistics.criticalMines++;
+    }
+
+    if (
+        typeof addInventoryItemV9 ===
+        "function"
+    ) {
+        addInventoryItemV9(
+            ore.id,
+            amount
+        );
+    }
+
+    const player = getMiningPlayerV21();
+    const gainedExp = critical
+        ? Math.floor(ore.exp * 1.5)
+        : ore.exp;
+
+    if (player) {
+
+        if (
+            typeof player.exp === "number"
+        ) {
+            player.exp += gainedExp;
+        }
+
+        if (
+            typeof player.experience === "number"
+        ) {
+            player.experience += gainedExp;
+        }
+    }
+
+    node.durability = Math.max(
+        0,
+        node.durability - 1
+    );
+
+    if (node.durability <= 0) {
+        node.depleted = true;
+        node.respawnAt =
+            Date.now() + node.respawnTime;
+    }
+
+    MiningSystemV21.statistics.successfulMines++;
+    MiningSystemV21.statistics.totalOres += amount;
+    MiningSystemV21.statistics.totalValue +=
+        ore.value * amount;
+
+    if (
+        ore.rarity !== OreRarityV21.COMMON
+    ) {
+        MiningSystemV21.statistics.rareOres++;
+    }
+
+    return {
+        success: true,
+        oreId: ore.id,
+        oreName: ore.name,
+        rarity: ore.rarity,
+        amount,
+        critical,
+        exp: gainedExp,
+        value: ore.value * amount,
+        durability: node.durability,
+        maxDurability: node.maxDurability,
+        depleted: node.depleted,
+        respawnAt: node.respawnAt
+    };
+}
+
+
+//================================================
+// CANCEL MINING
+//================================================
+
+function cancelMiningV21(nodeId) {
+
+    if (
+        !MiningSystemV21.activeSessions.has(nodeId)
+    ) {
+        return false;
+    }
+
+    MiningSystemV21.activeSessions.delete(nodeId);
+
+    return true;
+}
+
+
+//================================================
+// FIND NEAREST NODE
+//================================================
+
+function findNearestMiningNodeV21(
+    x,
+    y,
+    maxDistance = 150
+) {
+
+    let nearest = null;
+    let nearestDistance = Infinity;
+
+    for (
+        const node of
+        MiningSystemV21.nodes.values()
+    ) {
+
+        updateMiningNodeV21(node);
+
+        if (node.depleted) {
+            continue;
+        }
+
+        const dx = node.x - x;
+        const dy = node.y - y;
+
+        const distance = Math.sqrt(
+            dx * dx +
+            dy * dy
+        );
+
+        if (
+            distance <= maxDistance &&
+            distance < nearestDistance
+        ) {
+            nearest = node;
+            nearestDistance = distance;
+        }
+    }
+
+    return nearest;
+}
+
+
+//================================================
+// DEFAULT ORES
+//================================================
+
+registerOreV21({
+    id: "copper_ore",
+    name: "Copper Ore",
+    rarity: OreRarityV21.COMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 15,
+    exp: 8,
+    requiredLevel: 1
+});
+
+registerOreV21({
+    id: "tin_ore",
+    name: "Tin Ore",
+    rarity: OreRarityV21.COMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 18,
+    exp: 10,
+    requiredLevel: 3
+});
+
+registerOreV21({
+    id: "iron_ore",
+    name: "Iron Ore",
+    rarity: OreRarityV21.UNCOMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 45,
+    exp: 22,
+    requiredLevel: 10
+});
+
+registerOreV21({
+    id: "silver_ore",
+    name: "Silver Ore",
+    rarity: OreRarityV21.RARE,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 150,
+    exp: 55,
+    requiredLevel: 20
+});
+
+registerOreV21({
+    id: "gold_ore",
+    name: "Gold Ore",
+    rarity: OreRarityV21.RARE,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 260,
+    exp: 80,
+    requiredLevel: 28
+});
+
+registerOreV21({
+    id: "crystal_ore",
+    name: "Crystal Ore",
+    rarity: OreRarityV21.EPIC,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 850,
+    exp: 200,
+    requiredLevel: 40
+});
+
+registerOreV21({
+    id: "dragonium_ore",
+    name: "Dragonium Ore",
+    rarity: OreRarityV21.LEGENDARY,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 4500,
+    exp: 800,
+    requiredLevel: 55
+});
+
+registerOreV21({
+    id: "celestial_ore",
+    name: "Celestial Ore",
+    rarity: OreRarityV21.MYTHIC,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 50000,
+    exp: 3500,
+    requiredLevel: 75
+});
+
+
+//================================================
+// DEFAULT MINING NODES
+//================================================
+
+registerMiningNodeV21({
+    id: "copper_node_01",
+    name: "Copper Vein",
+    x: 700,
+    y: 420,
+    radius: 45,
+    maxDurability: 6,
+    requiredLevel: 1,
+
+    oreTable: [
+        {
+            id: "copper_ore",
+            weight: 75
+        },
+        {
+            id: "tin_ore",
+            weight: 25
+        }
+    ]
+});
+
+registerMiningNodeV21({
+    id: "iron_node_01",
+    name: "Iron Vein",
+    x: 1450,
+    y: 980,
+    radius: 50,
+    maxDurability: 7,
+    requiredLevel: 10,
+    respawnTime: 150000,
+
+    oreTable: [
+        {
+            id: "copper_ore",
+            weight: 20
+        },
+        {
+            id: "tin_ore",
+            weight: 30
+        },
+        {
+            id: "iron_ore",
+            weight: 50
+        }
+    ]
+});
+
+registerMiningNodeV21({
+    id: "gold_node_01",
+    name: "Golden Vein",
+    x: 2800,
+    y: 1800,
+    radius: 60,
+    maxDurability: 8,
+    requiredLevel: 25,
+    respawnTime: 240000,
+
+    oreTable: [
+        {
+            id: "iron_ore",
+            weight: 40
+        },
+        {
+            id: "silver_ore",
+            weight: 30
+        },
+        {
+            id: "gold_ore",
+            weight: 30
+        }
+    ]
+});
+
+registerMiningNodeV21({
+    id: "crystal_node_01",
+    name: "Crystal Vein",
+    x: 4100,
+    y: 2900,
+    radius: 65,
+    maxDurability: 10,
+    requiredLevel: 40,
+    respawnTime: 360000,
+
+    oreTable: [
+        {
+            id: "silver_ore",
+            weight: 30
+        },
+        {
+            id: "gold_ore",
+            weight: 30
+        },
+        {
+            id: "crystal_ore",
+            weight: 35
+        },
+        {
+            id: "dragonium_ore",
+            weight: 5
+        }
+    ]
+});
+
+registerMiningNodeV21({
+    id: "celestial_node_01",
+    name: "Celestial Ore Vein",
+    x: 6800,
+    y: 4600,
+    radius: 80,
+    maxDurability: 12,
+    requiredLevel: 70,
+    respawnTime: 900000,
+
+    oreTable: [
+        {
+            id: "crystal_ore",
+            weight: 40
+        },
+        {
+            id: "dragonium_ore",
+            weight: 45
+        },
+        {
+            id: "celestial_ore",
+            weight: 15
+        }
+    ]
+});
+
+
+//================================================
+// UPDATE ALL NODES
+//================================================
+
+function updateAllMiningNodesV21() {
+
+    for (
+        const node of
+        MiningSystemV21.nodes.values()
+    ) {
+        updateMiningNodeV21(node);
+    }
+}
+
+
+//================================================
+// SAVE DATA
+//================================================
+
+function getMiningSaveDataV21() {
+
+    return {
+        statistics: {
+            ...MiningSystemV21.statistics
+        },
+
+        nodes: Array.from(
+            MiningSystemV21.nodes.values()
+        ).map(node => ({
+            id: node.id,
+            durability: node.durability,
+            maxDurability: node.maxDurability,
+            depleted: node.depleted,
+            respawnAt: node.respawnAt
+        }))
+    };
+}
+
+
+//================================================
+// LOAD DATA
+//================================================
+
+function loadMiningSaveDataV21(data) {
+
+    if (!data) {
+        return;
+    }
+
+    if (data.statistics) {
+        MiningSystemV21.statistics = {
+            ...MiningSystemV21.statistics,
+            ...data.statistics
+        };
+    }
+
+    if (Array.isArray(data.nodes)) {
+
+        for (const saved of data.nodes) {
+
+            const node =
+                getMiningNodeV21(saved.id);
+
+            if (!node) {
+                continue;
+            }
+
+            node.durability = Math.max(
+                0,
+                Number(saved.durability)
+            );
+
+            node.maxDurability =
+                Number(saved.maxDurability) ||
+                node.maxDurability;
+
+            node.depleted =
+                Boolean(saved.depleted);
+
+            node.respawnAt =
+                Number(saved.respawnAt) || 0;
+        }
+    }
+
+    updateAllMiningNodesV21();
+}
+
+
+//================================================
+// EXPORT
+//================================================
+
+if (typeof window !== "undefined") {
+
+    window.MiningSystemV21 =
+        MiningSystemV21;
+
+    window.OreRarityV21 =
+        OreRarityV21;
+
+    window.OreItemV21 =
+        OreItemV21;
+
+    window.MiningNodeV21 =
+        MiningNodeV21;
+
+    window.registerOreV21 =
+        registerOreV21;
+
+    window.getOreV21 =
+        getOreV21;
+
+    window.registerMiningNodeV21 =
+        registerMiningNodeV21;
+
+    window.getMiningNodeV21 =
+        getMiningNodeV21;
+
+    window.getMiningLevelV21 =
+        getMiningLevelV21;
+
+    window.getMiningPowerV21 =
+        getMiningPowerV21;
+
+    window.getMiningLuckV21 =
+        getMiningLuckV21;
+
+    window.startMiningV21 =
+        startMiningV21;
+
+    window.updateMiningV21 =
+        updateMiningV21;
+
+    window.completeMiningV21 =
+        completeMiningV21;
+
+    window.cancelMiningV21 =
+        cancelMiningV21;
+
+    window.findNearestMiningNodeV21 =
+        findNearestMiningNodeV21;
+
+    window.updateMiningNodeV21 =
+        updateMiningNodeV21;
+
+    window.updateAllMiningNodesV21 =
+        updateAllMiningNodesV21;
+
+    window.getMiningSaveDataV21 =
+        getMiningSaveDataV21;
+
+    window.loadMiningSaveDataV21 =
+        loadMiningSaveDataV21;
+}
+
+
+//================================================
+// AUTO UPDATE
+//================================================
+
+if (typeof setInterval === "function") {
+
+    setInterval(
+        () => {
+
+            if (!MiningSystemV21.enabled) {
+                return;
+            }
+
+            updateAllMiningNodesV21();
+
+            for (
+                const nodeId of
+                MiningSystemV21.activeSessions.keys()
+            ) {
+                updateMiningV21(nodeId);
+            }
+
+        },
+        250
+    );
+}
+
+
+//================================================
+// END MINING SYSTEM V21
+//================================================
+                // js/systems/gathering.js
+//================================================
+// HERO OF WIND LAND
+// GATHERING SYSTEM V22
+//================================================
+
+const GatheringSystemV22 = {
+    enabled: true,
+    nodes: new Map(),
+    resources: new Map(),
+    activeSessions: new Map(),
+
+    statistics: {
+        gathers: 0,
+        successfulGathers: 0,
+        failedGathers: 0,
+        criticalGathers: 0,
+        rareResources: 0,
+        totalResources: 0,
+        totalValue: 0
+    },
+
+    config: {
+        baseGatherTime: 1200,
+        minGatherTime: 250,
+        maxGatherTime: 5000,
+        criticalChance: 0.1,
+        criticalMultiplier: 2,
+        defaultRespawn: 90000,
+        rareLuckBonus: 0.0025
+    }
+};
+
+
+//================================================
+// RESOURCE RARITY
+//================================================
+
+const ResourceRarityV22 = {
+    COMMON: "common",
+    UNCOMMON: "uncommon",
+    RARE: "rare",
+    EPIC: "epic",
+    LEGENDARY: "legendary",
+    MYTHIC: "mythic"
+};
+
+
+//================================================
+// RESOURCE TYPE
+//================================================
+
+const ResourceTypeV22 = {
+    HERB: "herb",
+    FLOWER: "flower",
+    WOOD: "wood",
+    PLANT: "plant",
+    MUSHROOM: "mushroom",
+    CRYSTAL_PLANT: "crystal_plant",
+    MAGICAL: "magical"
+};
+
+
+//================================================
+// RESOURCE ITEM CLASS
+//================================================
+
+class GatheringResourceV22 {
+
+    constructor(config = {}) {
+        this.id =
+            config.id ||
+            "resource_" +
+            Math.random()
+                .toString(36)
+                .slice(2);
+
+        this.name =
+            config.name ||
+            "Unknown Resource";
+
+        this.type =
+            config.type ||
+            ResourceTypeV22.PLANT;
+
+        this.rarity =
+            config.rarity ||
+            ResourceRarityV22.COMMON;
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(config.requiredLevel) || 1
+            );
+
+        this.minAmount =
+            Math.max(
+                1,
+                Number(config.minAmount) || 1
+            );
+
+        this.maxAmount =
+            Math.max(
+                this.minAmount,
+                Number(config.maxAmount) ||
+                this.minAmount
+            );
+
+        this.value =
+            Math.max(
+                0,
+                Number(config.value) || 1
+            );
+
+        this.exp =
+            Math.max(
+                0,
+                Number(config.exp) || 1
+            );
+
+        this.description =
+            config.description || "";
+    }
+
+}
+
+
+//================================================
+// GATHERING NODE CLASS
+//================================================
+
+class GatheringNodeV22 {
+
+    constructor(id, config = {}) {
+        this.id = id;
+
+        this.name =
+            config.name ||
+            "Resource Node";
+
+        this.x =
+            Number(config.x) || 0;
+
+        this.y =
+            Number(config.y) || 0;
+
+        this.radius =
+            Math.max(
+                15,
+                Number(config.radius) || 40
+            );
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(config.requiredLevel) || 1
+            );
+
+        this.resourceTable =
+            Array.isArray(config.resourceTable)
+                ? [...config.resourceTable]
+                : [];
+
+        this.maxHarvests =
+            Math.max(
+                1,
+                Number(config.maxHarvests) || 3
+            );
+
+        this.harvestsLeft =
+            Number.isFinite(
+                Number(config.harvestsLeft)
+            )
+                ? Math.max(
+                    0,
+                    Number(config.harvestsLeft)
+                )
+                : this.maxHarvests;
+
+        this.depleted =
+            this.harvestsLeft <= 0;
+
+        this.respawnTime =
+            Math.max(
+                1000,
+                Number(config.respawnTime) ||
+                GatheringSystemV22
+                    .config
+                    .defaultRespawn
+            );
+
+        this.respawnAt =
+            Number(config.respawnAt) || 0;
+    }
+
+}
+
+
+//================================================
+// REGISTER RESOURCE
+//================================================
+
+function registerGatheringResourceV22(config) {
+
+    const resource =
+        config instanceof GatheringResourceV22
+            ? config
+            : new GatheringResourceV22(config);
+
+    GatheringSystemV22.resources.set(
+        resource.id,
+        resource
+    );
+
+    return resource;
+}
+
+
+//================================================
+// GET RESOURCE
+//================================================
+
+function getGatheringResourceV22(resourceId) {
+
+    return GatheringSystemV22.resources.get(
+        resourceId
+    ) || null;
+}
+
+
+//================================================
+// REGISTER NODE
+//================================================
+
+function registerGatheringNodeV22(config) {
+
+    if (!config || !config.id) {
+        return null;
+    }
+
+    const node =
+        config instanceof GatheringNodeV22
+            ? config
+            : new GatheringNodeV22(
+                config.id,
+                config
+            );
+
+    GatheringSystemV22.nodes.set(
+        node.id,
+        node
+    );
+
+    return node;
+}
+
+
+//================================================
+// GET NODE
+//================================================
+
+function getGatheringNodeV22(nodeId) {
+
+    return GatheringSystemV22.nodes.get(
+        nodeId
+    ) || null;
+}
+
+
+//================================================
+// PLAYER
+//================================================
+
+function getGatheringPlayerV22() {
+
+    return typeof getPlayerSkillCaster ===
+        "function"
+        ? getPlayerSkillCaster()
+        : null;
+}
+
+
+//================================================
+// GATHERING LEVEL
+//================================================
+
+function getGatheringLevelV22() {
+
+    const player =
+        getGatheringPlayerV22();
+
+    if (!player) {
+        return 1;
+    }
+
+    return Math.max(
+        1,
+        Number(player.gatheringLevel) ||
+        Number(player.herbalismLevel) ||
+        Number(player.level) ||
+        1
+    );
+}
+
+
+//================================================
+// GATHERING SPEED
+//================================================
+
+function getGatheringSpeedV22() {
+
+    const player =
+        getGatheringPlayerV22();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.gatheringSpeed) ||
+        Number(player.harvestSpeed) ||
+        0
+    );
+}
+
+
+//================================================
+// GATHERING LUCK
+//================================================
+
+function getGatheringLuckV22() {
+
+    const player =
+        getGatheringPlayerV22();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.gatheringLuck) ||
+        Number(player.luck) ||
+        0
+    );
+}
+
+
+//================================================
+// UPDATE NODE
+//================================================
+
+function updateGatheringNodeV22(node) {
+
+    if (!node) {
+        return null;
+    }
+
+    if (!node.depleted) {
+        return node;
+    }
+
+    if (
+        Date.now() >= node.respawnAt
+    ) {
+        node.harvestsLeft =
+            node.maxHarvests;
+
+        node.depleted =
+            false;
+
+        node.respawnAt =
+            0;
+    }
+
+    return node;
+}
+
+
+//================================================
+// SELECT RESOURCE
+//================================================
+
+function selectGatheringResourceV22(node) {
+
+    if (!node) {
+        return null;
+    }
+
+    const level =
+        getGatheringLevelV22();
+
+    const luck =
+        getGatheringLuckV22();
+
+    const candidates = [];
+
+    for (
+        const entry of node.resourceTable
+    ) {
+
+        const resource =
+            getGatheringResourceV22(
+                entry.id
+            );
+
+        if (!resource) {
+            continue;
+        }
+
+        if (
+            level <
+            resource.requiredLevel
+        ) {
+            continue;
+        }
+
+        let weight =
+            Math.max(
+                0,
+                Number(entry.weight) || 1
+            );
+
+        if (
+            resource.rarity !==
+            ResourceRarityV22.COMMON
+        ) {
+            weight *=
+                1 +
+                luck *
+                GatheringSystemV22
+                    .config
+                    .rareLuckBonus;
+        }
+
+        candidates.push({
+            resource,
+            weight
+        });
+    }
+
+    if (!candidates.length) {
+        return null;
+    }
+
+    const totalWeight =
+        candidates.reduce(
+            (sum, entry) =>
+                sum + entry.weight,
+            0
+        );
+
+    let roll =
+        Math.random() * totalWeight;
+
+    for (
+        const entry of candidates
+    ) {
+        roll -= entry.weight;
+
+        if (roll <= 0) {
+            return entry.resource;
+        }
+    }
+
+    return candidates[
+        candidates.length - 1
+    ].resource;
+}
+
+
+//================================================
+// GATHER TIME
+//================================================
+
+function getGatheringTimeV22() {
+
+    const speed =
+        getGatheringSpeedV22();
+
+    const time =
+        GatheringSystemV22
+            .config
+            .baseGatherTime *
+        (
+            1 -
+            Math.min(
+                0.75,
+                speed * 0.01
+            )
+        );
+
+    return Math.max(
+        GatheringSystemV22
+            .config
+            .minGatherTime,
+        Math.min(
+            GatheringSystemV22
+                .config
+                .maxGatherTime,
+            time
+        )
+    );
+}
+
+
+//================================================
+// START GATHERING
+//================================================
+
+function startGatheringV22(nodeId) {
+
+    const node =
+        getGatheringNodeV22(nodeId);
+
+    if (!node) {
+
+        GatheringSystemV22
+            .statistics
+            .failedGathers++;
+
+        return {
+            success: false,
+            reason: "node_not_found"
+        };
+    }
+
+    updateGatheringNodeV22(node);
+
+    if (node.depleted) {
+        return {
+            success: false,
+            reason: "node_depleted",
+            respawnAt: node.respawnAt
+        };
+    }
+
+    if (
+        getGatheringLevelV22() <
+        node.requiredLevel
+    ) {
+        return {
+            success: false,
+            reason: "level_too_low"
+        };
+    }
+
+    if (
+        GatheringSystemV22
+            .activeSessions
+            .has(nodeId)
+    ) {
+        return {
+            success: false,
+            reason: "already_gathering"
+        };
+    }
+
+    const resource =
+        selectGatheringResourceV22(node);
+
+    if (!resource) {
+        return {
+            success: false,
+            reason: "no_available_resource"
+        };
+    }
+
+    const now =
+        Date.now();
+
+    const duration =
+        getGatheringTimeV22();
+
+    const session = {
+        nodeId,
+        resourceId: resource.id,
+        startedAt: now,
+        finishAt: now + duration,
+        duration,
+        completed: false
+    };
+
+    GatheringSystemV22
+        .activeSessions
+        .set(
+            nodeId,
+            session
+        );
+
+    GatheringSystemV22
+        .statistics
+        .gathers++;
+
+    return {
+        success: true,
+        nodeId,
+        resourceId: resource.id,
+        duration,
+        finishAt: session.finishAt
+    };
+}
+
+
+//================================================
+// UPDATE GATHERING
+//================================================
+
+function updateGatheringV22(nodeId) {
+
+    const session =
+        GatheringSystemV22
+            .activeSessions
+            .get(nodeId);
+
+    if (!session) {
+        return null;
+    }
+
+    const remaining =
+        Math.max(
+            0,
+            session.finishAt -
+            Date.now()
+        );
+
+    if (remaining <= 0) {
+        session.completed =
+            true;
+    }
+
+    return {
+        ...session,
+        remaining,
+        ready: remaining <= 0
+    };
+}
+
+
+//================================================
+// COMPLETE GATHERING
+//================================================
+
+function completeGatheringV22(nodeId) {
+
+    const session =
+        GatheringSystemV22
+            .activeSessions
+            .get(nodeId);
+
+    if (!session) {
+        return {
+            success: false,
+            reason: "no_active_session"
+        };
+    }
+
+    if (
+        Date.now() <
+        session.finishAt
+    ) {
+        return {
+            success: false,
+            reason: "gathering_not_finished",
+            remaining:
+                session.finishAt -
+                Date.now()
+        };
+    }
+
+    const node =
+        getGatheringNodeV22(nodeId);
+
+    const resource =
+        getGatheringResourceV22(
+            session.resourceId
+        );
+
+    GatheringSystemV22
+        .activeSessions
+        .delete(nodeId);
+
+    if (!node || !resource) {
+
+        GatheringSystemV22
+            .statistics
+            .failedGathers++;
+
+        return {
+            success: false,
+            reason: "gathering_data_missing"
+        };
+    }
+
+    const luck =
+        getGatheringLuckV22();
+
+    const criticalChance =
+        Math.min(
+            0.5,
+            GatheringSystemV22
+                .config
+                .criticalChance +
+            luck * 0.003
+        );
+
+    const critical =
+        Math.random() <
+        criticalChance;
+
+    let amount =
+        resource.minAmount +
+        Math.floor(
+            Math.random() *
+            (
+                resource.maxAmount -
+                resource.minAmount +
+                1
+            )
+        );
+
+    if (critical) {
+        amount *=
+            GatheringSystemV22
+                .config
+                .criticalMultiplier;
+
+        GatheringSystemV22
+            .statistics
+            .criticalGathers++;
+    }
+
+    if (
+        typeof addInventoryItemV9 ===
+        "function"
+    ) {
+        addInventoryItemV9(
+            resource.id,
+            amount
+        );
+    }
+
+    const player =
+        getGatheringPlayerV22();
+
+    const gainedExp =
+        critical
+            ? Math.floor(
+                resource.exp * 1.5
+            )
+            : resource.exp;
+
+    if (player) {
+
+        if (
+            typeof player.exp ===
+            "number"
+        ) {
+            player.exp +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.experience ===
+            "number"
+        ) {
+            player.experience +=
+                gainedExp;
+        }
+    }
+
+    node.harvestsLeft =
+        Math.max(
+            0,
+            node.harvestsLeft - 1
+        );
+
+    if (
+        node.harvestsLeft <= 0
+    ) {
+        node.depleted =
+            true;
+
+        node.respawnAt =
+            Date.now() +
+            node.respawnTime;
+    }
+
+    GatheringSystemV22
+        .statistics
+        .successfulGathers++;
+
+    GatheringSystemV22
+        .statistics
+        .totalResources +=
+        amount;
+
+    GatheringSystemV22
+        .statistics
+        .totalValue +=
+        resource.value * amount;
+
+    if (
+        resource.rarity !==
+        ResourceRarityV22.COMMON
+    ) {
+        GatheringSystemV22
+            .statistics
+            .rareResources++;
+    }
+
+    return {
+        success: true,
+        resourceId: resource.id,
+        resourceName: resource.name,
+        type: resource.type,
+        rarity: resource.rarity,
+        amount,
+        critical,
+        exp: gainedExp,
+        value:
+            resource.value * amount,
+        harvestsLeft:
+            node.harvestsLeft,
+        maxHarvests:
+            node.maxHarvests,
+        depleted:
+            node.depleted,
+        respawnAt:
+            node.respawnAt
+    };
+}
+
+
+//================================================
+// CANCEL GATHERING
+//================================================
+
+function cancelGatheringV22(nodeId) {
+
+    if (
+        !GatheringSystemV22
+            .activeSessions
+            .has(nodeId)
+    ) {
+        return false;
+    }
+
+    GatheringSystemV22
+        .activeSessions
+        .delete(nodeId);
+
+    return true;
+}
+
+
+//================================================
+// FIND NEAREST NODE
+//================================================
+
+function findNearestGatheringNodeV22(
+    x,
+    y,
+    maxDistance = 150
+) {
+
+    let nearest =
+        null;
+
+    let nearestDistance =
+        Infinity;
+
+    for (
+        const node of
+        GatheringSystemV22
+            .nodes
+            .values()
+    ) {
+
+        updateGatheringNodeV22(node);
+
+        if (node.depleted) {
+            continue;
+        }
+
+        const dx =
+            node.x - x;
+
+        const dy =
+            node.y - y;
+
+        const distance =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+        if (
+            distance <= maxDistance &&
+            distance < nearestDistance
+        ) {
+            nearest =
+                node;
+
+            nearestDistance =
+                distance;
+        }
+    }
+
+    return nearest;
+}
+
+
+//================================================
+// DEFAULT RESOURCES
+//================================================
+
+registerGatheringResourceV22({
+    id: "wild_grass",
+    name: "Wild Grass",
+    type: ResourceTypeV22.PLANT,
+    rarity: ResourceRarityV22.COMMON,
+    minAmount: 1,
+    maxAmount: 4,
+    value: 5,
+    exp: 4,
+    requiredLevel: 1
+});
+
+registerGatheringResourceV22({
+    id: "red_flower",
+    name: "Red Flower",
+    type: ResourceTypeV22.FLOWER,
+    rarity: ResourceRarityV22.COMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 9,
+    exp: 6,
+    requiredLevel: 1
+});
+
+registerGatheringResourceV22({
+    id: "healing_herb",
+    name: "Healing Herb",
+    type: ResourceTypeV22.HERB,
+    rarity: ResourceRarityV22.UNCOMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 30,
+    exp: 15,
+    requiredLevel: 8
+});
+
+registerGatheringResourceV22({
+    id: "blue_mushroom",
+    name: "Blue Mushroom",
+    type: ResourceTypeV22.MUSHROOM,
+    rarity: ResourceRarityV22.UNCOMMON,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 45,
+    exp: 20,
+    requiredLevel: 12
+});
+
+registerGatheringResourceV22({
+    id: "moon_flower",
+    name: "Moon Flower",
+    type: ResourceTypeV22.FLOWER,
+    rarity: ResourceRarityV22.RARE,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 180,
+    exp: 70,
+    requiredLevel: 25
+});
+
+registerGatheringResourceV22({
+    id: "crystal_bloom",
+    name: "Crystal Bloom",
+    type: ResourceTypeV22.CRYSTAL_PLANT,
+    rarity: ResourceRarityV22.EPIC,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 750,
+    exp: 180,
+    requiredLevel: 40
+});
+
+registerGatheringResourceV22({
+    id: "dragon_lotus",
+    name: "Dragon Lotus",
+    type: ResourceTypeV22.MAGICAL,
+    rarity: ResourceRarityV22.LEGENDARY,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 5000,
+    exp: 750,
+    requiredLevel: 55
+});
+
+registerGatheringResourceV22({
+    id: "world_tree_leaf",
+    name: "World Tree Leaf",
+    type: ResourceTypeV22.MAGICAL,
+    rarity: ResourceRarityV22.MYTHIC,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 50000,
+    exp: 3000,
+    requiredLevel: 75
+});
+
+
+//================================================
+// DEFAULT GATHERING NODES
+//================================================
+
+registerGatheringNodeV22({
+    id: "grass_field_01",
+    name: "Green Grass Field",
+    x: 480,
+    y: 700,
+    radius: 60,
+    maxHarvests: 5,
+    requiredLevel: 1,
+
+    resourceTable: [
+        { id: "wild_grass", weight: 70 },
+        { id: "red_flower", weight: 30 }
+    ]
+});
+
+registerGatheringNodeV22({
+    id: "forest_herbs_01",
+    name: "Forest Herbs",
+    x: 1200,
+    y: 1350,
+    radius: 70,
+    maxHarvests: 5,
+    requiredLevel: 8,
+
+    resourceTable: [
+        { id: "wild_grass", weight: 20 },
+        { id: "healing_herb", weight: 55 },
+        { id: "blue_mushroom", weight: 25 }
+    ]
+});
+
+registerGatheringNodeV22({
+    id: "moon_garden_01",
+    name: "Moonlight Garden",
+    x: 2700,
+    y: 1900,
+    radius: 80,
+    maxHarvests: 4,
+    requiredLevel: 20,
+    respawnTime: 180000,
+
+    resourceTable: [
+        { id: "healing_herb", weight: 35 },
+        { id: "blue_mushroom", weight: 30 },
+        { id: "moon_flower", weight: 35 }
+    ]
+});
+
+registerGatheringNodeV22({
+    id: "crystal_garden_01",
+    name: "Crystal Garden",
+    x: 4300,
+    y: 3100,
+    radius: 90,
+    maxHarvests: 4,
+    requiredLevel: 40,
+    respawnTime: 360000,
+
+    resourceTable: [
+        { id: "moon_flower", weight: 35 },
+        { id: "crystal_bloom", weight: 55 },
+        { id: "dragon_lotus", weight: 10 }
+    ]
+});
+
+registerGatheringNodeV22({
+    id: "world_tree_01",
+    name: "World Tree Roots",
+    x: 7200,
+    y: 5000,
+    radius: 120,
+    maxHarvests: 3,
+    requiredLevel: 70,
+    respawnTime: 900000,
+
+    resourceTable: [
+        { id: "crystal_bloom", weight: 35 },
+        { id: "dragon_lotus", weight: 45 },
+        { id: "world_tree_leaf", weight: 20 }
+    ]
+});
+
+
+//================================================
+// UPDATE ALL NODES
+//================================================
+
+function updateAllGatheringNodesV22() {
+
+    for (
+        const node of
+        GatheringSystemV22
+            .nodes
+            .values()
+    ) {
+        updateGatheringNodeV22(node);
+    }
+}
+
+
+//================================================
+// SAVE DATA
+//================================================
+
+function getGatheringSaveDataV22() {
+
+    return {
+        statistics: {
+            ...GatheringSystemV22.statistics
+        },
+
+        nodes: Array.from(
+            GatheringSystemV22
+                .nodes
+                .values()
+        ).map(node => ({
+            id: node.id,
+            harvestsLeft: node.harvestsLeft,
+            maxHarvests: node.maxHarvests,
+            depleted: node.depleted,
+            respawnAt: node.respawnAt
+        }))
+    };
+}
+
+
+//================================================
+// LOAD DATA
+//================================================
+
+function loadGatheringSaveDataV22(data) {
+
+    if (!data) {
+        return;
+    }
+
+    if (data.statistics) {
+        GatheringSystemV22.statistics = {
+            ...GatheringSystemV22.statistics,
+            ...data.statistics
+        };
+    }
+
+    if (Array.isArray(data.nodes)) {
+
+        for (
+            const saved of data.nodes
+        ) {
+
+            const node =
+                getGatheringNodeV22(
+                    saved.id
+                );
+
+            if (!node) {
+                continue;
+            }
+
+            node.harvestsLeft =
+                Math.max(
+                    0,
+                    Number(saved.harvestsLeft)
+                );
+
+            node.maxHarvests =
+                Number(saved.maxHarvests) ||
+                node.maxHarvests;
+
+            node.depleted =
+                Boolean(saved.depleted);
+
+            node.respawnAt =
+                Number(saved.respawnAt) || 0;
+        }
+    }
+
+    updateAllGatheringNodesV22();
+}
+
+
+//================================================
+// EXPORT
+//================================================
+
+if (typeof window !== "undefined") {
+
+    window.GatheringSystemV22 =
+        GatheringSystemV22;
+
+    window.ResourceRarityV22 =
+        ResourceRarityV22;
+
+    window.ResourceTypeV22 =
+        ResourceTypeV22;
+
+    window.GatheringResourceV22 =
+        GatheringResourceV22;
+
+    window.GatheringNodeV22 =
+        GatheringNodeV22;
+
+    window.registerGatheringResourceV22 =
+        registerGatheringResourceV22;
+
+    window.getGatheringResourceV22 =
+        getGatheringResourceV22;
+
+    window.registerGatheringNodeV22 =
+        registerGatheringNodeV22;
+
+    window.getGatheringNodeV22 =
+        getGatheringNodeV22;
+
+    window.getGatheringLevelV22 =
+        getGatheringLevelV22;
+
+    window.getGatheringLuckV22 =
+        getGatheringLuckV22;
+
+    window.startGatheringV22 =
+        startGatheringV22;
+
+    window.updateGatheringV22 =
+        updateGatheringV22;
+
+    window.completeGatheringV22 =
+        completeGatheringV22;
+
+    window.cancelGatheringV22 =
+        cancelGatheringV22;
+
+    window.findNearestGatheringNodeV22 =
+        findNearestGatheringNodeV22;
+
+    window.updateGatheringNodeV22 =
+        updateGatheringNodeV22;
+
+    window.updateAllGatheringNodesV22 =
+        updateAllGatheringNodesV22;
+
+    window.getGatheringSaveDataV22 =
+        getGatheringSaveDataV22;
+
+    window.loadGatheringSaveDataV22 =
+        loadGatheringSaveDataV22;
+}
+
+
+//================================================
+// AUTO UPDATE
+//================================================
+
+if (typeof setInterval === "function") {
+
+    setInterval(
+        () => {
+
+            if (
+                !GatheringSystemV22.enabled
+            ) {
+                return;
+            }
+
+            updateAllGatheringNodesV22();
+
+            for (
+                const nodeId of
+                GatheringSystemV22
+                    .activeSessions
+                    .keys()
+            ) {
+                updateGatheringV22(
+                    nodeId
+                );
+            }
+
+        },
+        250
+    );
+}
+
+
+//================================================
+// END GATHERING SYSTEM V22
+//================================================
+                // js/systems/herbalism.js
+//================================================
+// HERO OF WIND LAND
+// HERBALISM SYSTEM V23
+//================================================
+
+const HerbalismSystemV23 = {
+    enabled: true,
+    herbs: new Map(),
+    patches: new Map(),
+    activeSessions: new Map(),
+
+    statistics: {
+        attempts: 0,
+        successfulHarvests: 0,
+        failedHarvests: 0,
+        criticalHarvests: 0,
+        rareHerbs: 0,
+        totalHerbs: 0,
+        totalValue: 0,
+        totalExp: 0
+    },
+
+    config: {
+        baseHarvestTime: 1400,
+        minHarvestTime: 300,
+        maxHarvestTime: 5000,
+        criticalChance: 0.08,
+        criticalMultiplier: 2,
+        rareLuckBonus: 0.002,
+        defaultRespawn: 120000
+    }
+};
+
+
+//================================================
+// HERB RARITY
+//================================================
+
+const HerbRarityV23 = {
+    COMMON: "common",
+    UNCOMMON: "uncommon",
+    RARE: "rare",
+    EPIC: "epic",
+    LEGENDARY: "legendary",
+    MYTHIC: "mythic"
+};
+
+
+//================================================
+// HERB TYPE
+//================================================
+
+const HerbTypeV23 = {
+    HEALING: "healing",
+    ENERGY: "energy",
+    ANTIDOTE: "antidote",
+    FIRE: "fire",
+    ICE: "ice",
+    WIND: "wind",
+    EARTH: "earth",
+    SHADOW: "shadow",
+    HOLY: "holy",
+    MAGICAL: "magical"
+};
+
+
+//================================================
+// HERB CLASS
+//================================================
+
+class HerbItemV23 {
+
+    constructor(config = {}) {
+        this.id =
+            config.id ||
+            "herb_" +
+            Math.random().toString(36).slice(2);
+
+        this.name =
+            config.name ||
+            "Unknown Herb";
+
+        this.type =
+            config.type ||
+            HerbTypeV23.HEALING;
+
+        this.rarity =
+            config.rarity ||
+            HerbRarityV23.COMMON;
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(config.requiredLevel) || 1
+            );
+
+        this.minAmount =
+            Math.max(
+                1,
+                Number(config.minAmount) || 1
+            );
+
+        this.maxAmount =
+            Math.max(
+                this.minAmount,
+                Number(config.maxAmount) ||
+                this.minAmount
+            );
+
+        this.value =
+            Math.max(
+                0,
+                Number(config.value) || 1
+            );
+
+        this.exp =
+            Math.max(
+                0,
+                Number(config.exp) || 1
+            );
+
+        this.effect =
+            config.effect || null;
+
+        this.description =
+            config.description || "";
+    }
+
+}
+
+
+//================================================
+// HERB PATCH CLASS
+//================================================
+
+class HerbPatchV23 {
+
+    constructor(id, config = {}) {
+        this.id = id;
+
+        this.name =
+            config.name ||
+            "Herb Patch";
+
+        this.x =
+            Number(config.x) || 0;
+
+        this.y =
+            Number(config.y) || 0;
+
+        this.radius =
+            Math.max(
+                15,
+                Number(config.radius) || 45
+            );
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(config.requiredLevel) || 1
+            );
+
+        this.herbTable =
+            Array.isArray(config.herbTable)
+                ? [...config.herbTable]
+                : [];
+
+        this.maxHarvests =
+            Math.max(
+                1,
+                Number(config.maxHarvests) || 3
+            );
+
+        this.harvestsLeft =
+            Number.isFinite(
+                Number(config.harvestsLeft)
+            )
+                ? Math.max(
+                    0,
+                    Number(config.harvestsLeft)
+                )
+                : this.maxHarvests;
+
+        this.depleted =
+            this.harvestsLeft <= 0;
+
+        this.respawnTime =
+            Math.max(
+                1000,
+                Number(config.respawnTime) ||
+                HerbalismSystemV23
+                    .config
+                    .defaultRespawn
+            );
+
+        this.respawnAt =
+            Number(config.respawnAt) || 0;
+    }
+
+}
+
+
+//================================================
+// REGISTER HERB
+//================================================
+
+function registerHerbV23(config) {
+
+    const herb =
+        config instanceof HerbItemV23
+            ? config
+            : new HerbItemV23(config);
+
+    HerbalismSystemV23.herbs.set(
+        herb.id,
+        herb
+    );
+
+    return herb;
+}
+
+
+//================================================
+// GET HERB
+//================================================
+
+function getHerbV23(herbId) {
+
+    return HerbalismSystemV23.herbs.get(
+        herbId
+    ) || null;
+}
+
+
+//================================================
+// REGISTER PATCH
+//================================================
+
+function registerHerbPatchV23(config) {
+
+    if (!config || !config.id) {
+        return null;
+    }
+
+    const patch =
+        config instanceof HerbPatchV23
+            ? config
+            : new HerbPatchV23(
+                config.id,
+                config
+            );
+
+    HerbalismSystemV23.patches.set(
+        patch.id,
+        patch
+    );
+
+    return patch;
+}
+
+
+//================================================
+// GET PATCH
+//================================================
+
+function getHerbPatchV23(patchId) {
+
+    return HerbalismSystemV23.patches.get(
+        patchId
+    ) || null;
+}
+
+
+//================================================
+// GET PLAYER
+//================================================
+
+function getHerbalismPlayerV23() {
+
+    return typeof getPlayerSkillCaster ===
+        "function"
+        ? getPlayerSkillCaster()
+        : null;
+}
+
+
+//================================================
+// HERBALISM LEVEL
+//================================================
+
+function getHerbalismLevelV23() {
+
+    const player =
+        getHerbalismPlayerV23();
+
+    if (!player) {
+        return 1;
+    }
+
+    return Math.max(
+        1,
+        Number(player.herbalismLevel) ||
+        Number(player.gatheringLevel) ||
+        Number(player.level) ||
+        1
+    );
+}
+
+
+//================================================
+// HERBALISM SPEED
+//================================================
+
+function getHerbalismSpeedV23() {
+
+    const player =
+        getHerbalismPlayerV23();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.herbalismSpeed) ||
+        Number(player.gatheringSpeed) ||
+        0
+    );
+}
+
+
+//================================================
+// HERBALISM LUCK
+//================================================
+
+function getHerbalismLuckV23() {
+
+    const player =
+        getHerbalismPlayerV23();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.herbalismLuck) ||
+        Number(player.gatheringLuck) ||
+        Number(player.luck) ||
+        0
+    );
+}
+
+
+//================================================
+// UPDATE HERB PATCH
+//================================================
+
+function updateHerbPatchV23(patch) {
+
+    if (!patch) {
+        return null;
+    }
+
+    if (!patch.depleted) {
+        return patch;
+    }
+
+    if (
+        Date.now() >= patch.respawnAt
+    ) {
+        patch.harvestsLeft =
+            patch.maxHarvests;
+
+        patch.depleted =
+            false;
+
+        patch.respawnAt =
+            0;
+    }
+
+    return patch;
+}
+
+
+//================================================
+// SELECT HERB
+//================================================
+
+function selectHerbV23(patch) {
+
+    if (!patch) {
+        return null;
+    }
+
+    const level =
+        getHerbalismLevelV23();
+
+    const luck =
+        getHerbalismLuckV23();
+
+    const candidates = [];
+
+    for (
+        const entry of patch.herbTable
+    ) {
+        const herb =
+            getHerbV23(entry.id);
+
+        if (!herb) {
+            continue;
+        }
+
+        if (
+            level <
+            herb.requiredLevel
+        ) {
+            continue;
+        }
+
+        let weight =
+            Math.max(
+                0,
+                Number(entry.weight) || 1
+            );
+
+        if (
+            herb.rarity !==
+            HerbRarityV23.COMMON
+        ) {
+            weight *=
+                1 +
+                luck *
+                HerbalismSystemV23
+                    .config
+                    .rareLuckBonus;
+        }
+
+        candidates.push({
+            herb,
+            weight
+        });
+    }
+
+    if (!candidates.length) {
+        return null;
+    }
+
+    const totalWeight =
+        candidates.reduce(
+            (sum, entry) =>
+                sum + entry.weight,
+            0
+        );
+
+    let roll =
+        Math.random() * totalWeight;
+
+    for (
+        const entry of candidates
+    ) {
+        roll -= entry.weight;
+
+        if (roll <= 0) {
+            return entry.herb;
+        }
+    }
+
+    return candidates[
+        candidates.length - 1
+    ].herb;
+}
+
+
+//================================================
+// HARVEST TIME
+//================================================
+
+function getHerbalismHarvestTimeV23() {
+
+    const speed =
+        getHerbalismSpeedV23();
+
+    const time =
+        HerbalismSystemV23
+            .config
+            .baseHarvestTime *
+        (
+            1 -
+            Math.min(
+                0.75,
+                speed * 0.01
+            )
+        );
+
+    return Math.max(
+        HerbalismSystemV23
+            .config
+            .minHarvestTime,
+        Math.min(
+            HerbalismSystemV23
+                .config
+                .maxHarvestTime,
+            time
+        )
+    );
+}
+
+
+//================================================
+// START HARVEST
+//================================================
+
+function startHerbalismV23(patchId) {
+
+    const patch =
+        getHerbPatchV23(patchId);
+
+    if (!patch) {
+
+        HerbalismSystemV23
+            .statistics
+            .failedHarvests++;
+
+        return {
+            success: false,
+            reason: "patch_not_found"
+        };
+    }
+
+    updateHerbPatchV23(patch);
+
+    if (patch.depleted) {
+        return {
+            success: false,
+            reason: "patch_depleted",
+            respawnAt: patch.respawnAt
+        };
+    }
+
+    if (
+        getHerbalismLevelV23() <
+        patch.requiredLevel
+    ) {
+        return {
+            success: false,
+            reason: "level_too_low"
+        };
+    }
+
+    if (
+        HerbalismSystemV23
+            .activeSessions
+            .has(patchId)
+    ) {
+        return {
+            success: false,
+            reason: "already_harvesting"
+        };
+    }
+
+    const herb =
+        selectHerbV23(patch);
+
+    if (!herb) {
+        return {
+            success: false,
+            reason: "no_available_herb"
+        };
+    }
+
+    const now =
+        Date.now();
+
+    const duration =
+        getHerbalismHarvestTimeV23();
+
+    const session = {
+        patchId,
+        herbId: herb.id,
+        startedAt: now,
+        finishAt: now + duration,
+        duration,
+        completed: false
+    };
+
+    HerbalismSystemV23
+        .activeSessions
+        .set(
+            patchId,
+            session
+        );
+
+    HerbalismSystemV23
+        .statistics
+        .attempts++;
+
+    return {
+        success: true,
+        patchId,
+        herbId: herb.id,
+        duration,
+        finishAt: session.finishAt
+    };
+}
+
+
+//================================================
+// UPDATE HARVEST
+//================================================
+
+function updateHerbalismV23(patchId) {
+
+    const session =
+        HerbalismSystemV23
+            .activeSessions
+            .get(patchId);
+
+    if (!session) {
+        return null;
+    }
+
+    const remaining =
+        Math.max(
+            0,
+            session.finishAt -
+            Date.now()
+        );
+
+    if (remaining <= 0) {
+        session.completed =
+            true;
+    }
+
+    return {
+        ...session,
+        remaining,
+        ready: remaining <= 0
+    };
+}
+
+
+//================================================
+// COMPLETE HARVEST
+//================================================
+
+function completeHerbalismV23(patchId) {
+
+    const session =
+        HerbalismSystemV23
+            .activeSessions
+            .get(patchId);
+
+    if (!session) {
+        return {
+            success: false,
+            reason: "no_active_session"
+        };
+    }
+
+    if (
+        Date.now() <
+        session.finishAt
+    ) {
+        return {
+            success: false,
+            reason: "harvest_not_finished",
+            remaining:
+                session.finishAt -
+                Date.now()
+        };
+    }
+
+    const patch =
+        getHerbPatchV23(patchId);
+
+    const herb =
+        getHerbV23(
+            session.herbId
+        );
+
+    HerbalismSystemV23
+        .activeSessions
+        .delete(patchId);
+
+    if (!patch || !herb) {
+
+        HerbalismSystemV23
+            .statistics
+            .failedHarvests++;
+
+        return {
+            success: false,
+            reason: "harvest_data_missing"
+        };
+    }
+
+    const luck =
+        getHerbalismLuckV23();
+
+    const criticalChance =
+        Math.min(
+            0.5,
+            HerbalismSystemV23
+                .config
+                .criticalChance +
+            luck * 0.003
+        );
+
+    const critical =
+        Math.random() <
+        criticalChance;
+
+    let amount =
+        herb.minAmount +
+        Math.floor(
+            Math.random() *
+            (
+                herb.maxAmount -
+                herb.minAmount +
+                1
+            )
+        );
+
+    if (critical) {
+        amount *=
+            HerbalismSystemV23
+                .config
+                .criticalMultiplier;
+
+        HerbalismSystemV23
+            .statistics
+            .criticalHarvests++;
+    }
+
+    if (
+        typeof addInventoryItemV9 ===
+        "function"
+    ) {
+        addInventoryItemV9(
+            herb.id,
+            amount
+        );
+    }
+
+    const player =
+        getHerbalismPlayerV23();
+
+    const gainedExp =
+        critical
+            ? Math.floor(
+                herb.exp * 1.5
+            )
+            : herb.exp;
+
+    if (player) {
+
+        if (
+            typeof player.exp ===
+            "number"
+        ) {
+            player.exp +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.experience ===
+            "number"
+        ) {
+            player.experience +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.herbalismExp ===
+            "number"
+        ) {
+            player.herbalismExp +=
+                gainedExp;
+        }
+    }
+
+    patch.harvestsLeft =
+        Math.max(
+            0,
+            patch.harvestsLeft - 1
+        );
+
+    if (
+        patch.harvestsLeft <= 0
+    ) {
+        patch.depleted =
+            true;
+
+        patch.respawnAt =
+            Date.now() +
+            patch.respawnTime;
+    }
+
+    HerbalismSystemV23
+        .statistics
+        .successfulHarvests++;
+
+    HerbalismSystemV23
+        .statistics
+        .totalHerbs +=
+        amount;
+
+    HerbalismSystemV23
+        .statistics
+        .totalValue +=
+        herb.value * amount;
+
+    HerbalismSystemV23
+        .statistics
+        .totalExp +=
+        gainedExp;
+
+    if (
+        herb.rarity !==
+        HerbRarityV23.COMMON
+    ) {
+        HerbalismSystemV23
+            .statistics
+            .rareHerbs++;
+    }
+
+    return {
+        success: true,
+        herbId: herb.id,
+        herbName: herb.name,
+        type: herb.type,
+        rarity: herb.rarity,
+        amount,
+        critical,
+        exp: gainedExp,
+        value:
+            herb.value * amount,
+        effect:
+            herb.effect,
+        harvestsLeft:
+            patch.harvestsLeft,
+        maxHarvests:
+            patch.maxHarvests,
+        depleted:
+            patch.depleted,
+        respawnAt:
+            patch.respawnAt
+    };
+}
+
+
+//================================================
+// CANCEL HARVEST
+//================================================
+
+function cancelHerbalismV23(patchId) {
+
+    if (
+        !HerbalismSystemV23
+            .activeSessions
+            .has(patchId)
+    ) {
+        return false;
+    }
+
+    HerbalismSystemV23
+        .activeSessions
+        .delete(patchId);
+
+    return true;
+}
+
+
+//================================================
+// FIND NEAREST PATCH
+//================================================
+
+function findNearestHerbPatchV23(
+    x,
+    y,
+    maxDistance = 150
+) {
+
+    let nearest =
+        null;
+
+    let nearestDistance =
+        Infinity;
+
+    for (
+        const patch of
+        HerbalismSystemV23
+            .patches
+            .values()
+    ) {
+
+        updateHerbPatchV23(patch);
+
+        if (patch.depleted) {
+            continue;
+        }
+
+        const dx =
+            patch.x - x;
+
+        const dy =
+            patch.y - y;
+
+        const distance =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+        if (
+            distance <= maxDistance &&
+            distance < nearestDistance
+        ) {
+            nearest =
+                patch;
+
+            nearestDistance =
+                distance;
+        }
+    }
+
+    return nearest;
+}
+
+
+//================================================
+// DEFAULT HERBS
+//================================================
+
+registerHerbV23({
+    id: "green_leaf",
+    name: "Green Leaf",
+    type: HerbTypeV23.HEALING,
+    rarity: HerbRarityV23.COMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 8,
+    exp: 5,
+    requiredLevel: 1,
+    effect: {
+        hpRestore: 5
+    }
+});
+
+registerHerbV23({
+    id: "red_herb",
+    name: "Red Herb",
+    type: HerbTypeV23.HEALING,
+    rarity: HerbRarityV23.COMMON,
+    minAmount: 1,
+    maxAmount: 3,
+    value: 14,
+    exp: 8,
+    requiredLevel: 3,
+    effect: {
+        hpRestore: 12
+    }
+});
+
+registerHerbV23({
+    id: "blue_herb",
+    name: "Blue Herb",
+    type: HerbTypeV23.ENERGY,
+    rarity: HerbRarityV23.UNCOMMON,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 35,
+    exp: 18,
+    requiredLevel: 10,
+    effect: {
+        manaRestore: 20
+    }
+});
+
+registerHerbV23({
+    id: "antidote_leaf",
+    name: "Antidote Leaf",
+    type: HerbTypeV23.ANTIDOTE,
+    rarity: HerbRarityV23.UNCOMMON,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 55,
+    exp: 25,
+    requiredLevel: 15,
+    effect: {
+        removePoison: true
+    }
+});
+
+registerHerbV23({
+    id: "fire_blossom",
+    name: "Fire Blossom",
+    type: HerbTypeV23.FIRE,
+    rarity: HerbRarityV23.RARE,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 220,
+    exp: 75,
+    requiredLevel: 25,
+    effect: {
+        firePower: 10
+    }
+});
+
+registerHerbV23({
+    id: "ice_lotus",
+    name: "Ice Lotus",
+    type: HerbTypeV23.ICE,
+    rarity: HerbRarityV23.RARE,
+    minAmount: 1,
+    maxAmount: 2,
+    value: 260,
+    exp: 85,
+    requiredLevel: 30,
+    effect: {
+        icePower: 10
+    }
+});
+
+registerHerbV23({
+    id: "wind_orchid",
+    name: "Wind Orchid",
+    type: HerbTypeV23.WIND,
+    rarity: HerbRarityV23.EPIC,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 950,
+    exp: 230,
+    requiredLevel: 42,
+    effect: {
+        speedBonus: 5
+    }
+});
+
+registerHerbV23({
+    id: "shadow_mandragora",
+    name: "Shadow Mandragora",
+    type: HerbTypeV23.SHADOW,
+    rarity: HerbRarityV23.EPIC,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 1500,
+    exp: 320,
+    requiredLevel: 48,
+    effect: {
+        shadowPower: 15
+    }
+});
+
+registerHerbV23({
+    id: "dragon_heart_flower",
+    name: "Dragon Heart Flower",
+    type: HerbTypeV23.MAGICAL,
+    rarity: HerbRarityV23.LEGENDARY,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 8000,
+    exp: 1000,
+    requiredLevel: 60,
+    effect: {
+        maxHpBonus: 50
+    }
+});
+
+registerHerbV23({
+    id: "world_bloom",
+    name: "World Bloom",
+    type: HerbTypeV23.HOLY,
+    rarity: HerbRarityV23.MYTHIC,
+    minAmount: 1,
+    maxAmount: 1,
+    value: 75000,
+    exp: 5000,
+    requiredLevel: 80,
+    effect: {
+        legendaryCraftMaterial: true
+    }
+});
+
+
+//================================================
+// DEFAULT HERB PATCHES
+//================================================
+
+registerHerbPatchV23({
+    id: "herb_patch_01",
+    name: "Beginner Herb Field",
+    x: 620,
+    y: 820,
+    radius: 60,
+    maxHarvests: 5,
+    requiredLevel: 1,
+
+    herbTable: [
+        { id: "green_leaf", weight: 70 },
+        { id: "red_herb", weight: 30 }
+    ]
+});
+
+registerHerbPatchV23({
+    id: "herb_patch_02",
+    name: "Forest Medicine Garden",
+    x: 1550,
+    y: 1280,
+    radius: 75,
+    maxHarvests: 5,
+    requiredLevel: 10,
+
+    herbTable: [
+        { id: "red_herb", weight: 25 },
+        { id: "blue_herb", weight: 45 },
+        { id: "antidote_leaf", weight: 30 }
+    ]
+});
+
+registerHerbPatchV23({
+    id: "herb_patch_03",
+    name: "Elemental Valley",
+    x: 2900,
+    y: 2050,
+    radius: 90,
+    maxHarvests: 4,
+    requiredLevel: 25,
+    respawnTime: 240000,
+
+    herbTable: [
+        { id: "fire_blossom", weight: 40 },
+        { id: "ice_lotus", weight: 35 },
+        { id: "wind_orchid", weight: 25 }
+    ]
+});
+
+registerHerbPatchV23({
+    id: "herb_patch_04",
+    name: "Shadow Grove",
+    x: 4700,
+    y: 3500,
+    radius: 100,
+    maxHarvests: 4,
+    requiredLevel: 45,
+    respawnTime: 420000,
+
+    herbTable: [
+        { id: "wind_orchid", weight: 30 },
+        { id: "shadow_mandragora", weight: 50 },
+        { id: "dragon_heart_flower", weight: 20 }
+    ]
+});
+
+registerHerbPatchV23({
+    id: "herb_patch_05",
+    name: "World Tree Sanctuary",
+    x: 7600,
+    y: 5300,
+    radius: 140,
+    maxHarvests: 3,
+    requiredLevel: 75,
+    respawnTime: 1200000,
+
+    herbTable: [
+        { id: "shadow_mandragora", weight: 30 },
+        { id: "dragon_heart_flower", weight: 45 },
+        { id: "world_bloom", weight: 25 }
+    ]
+});
+
+
+//================================================
+// UPDATE ALL PATCHES
+//================================================
+
+function updateAllHerbPatchesV23() {
+
+    for (
+        const patch of
+        HerbalismSystemV23
+            .patches
+            .values()
+    ) {
+        updateHerbPatchV23(patch);
+    }
+}
+
+
+//================================================
+// SAVE DATA
+//================================================
+
+function getHerbalismSaveDataV23() {
+
+    return {
+        statistics: {
+            ...HerbalismSystemV23.statistics
+        },
+
+        patches: Array.from(
+            HerbalismSystemV23
+                .patches
+                .values()
+        ).map(patch => ({
+            id: patch.id,
+            harvestsLeft: patch.harvestsLeft,
+            maxHarvests: patch.maxHarvests,
+            depleted: patch.depleted,
+            respawnAt: patch.respawnAt
+        }))
+    };
+}
+
+
+//================================================
+// LOAD DATA
+//================================================
+
+function loadHerbalismSaveDataV23(data) {
+
+    if (!data) {
+        return;
+    }
+
+    if (data.statistics) {
+        HerbalismSystemV23.statistics = {
+            ...HerbalismSystemV23.statistics,
+            ...data.statistics
+        };
+    }
+
+    if (Array.isArray(data.patches)) {
+
+        for (
+            const saved of data.patches
+        ) {
+
+            const patch =
+                getHerbPatchV23(
+                    saved.id
+                );
+
+            if (!patch) {
+                continue;
+            }
+
+            patch.harvestsLeft =
+                Math.max(
+                    0,
+                    Number(saved.harvestsLeft)
+                );
+
+            patch.maxHarvests =
+                Number(saved.maxHarvests) ||
+                patch.maxHarvests;
+
+            patch.depleted =
+                Boolean(saved.depleted);
+
+            patch.respawnAt =
+                Number(saved.respawnAt) || 0;
+        }
+    }
+
+    updateAllHerbPatchesV23();
+}
+
+
+//================================================
+// EXPORT
+//================================================
+
+if (typeof window !== "undefined") {
+
+    window.HerbalismSystemV23 =
+        HerbalismSystemV23;
+
+    window.HerbRarityV23 =
+        HerbRarityV23;
+
+    window.HerbTypeV23 =
+        HerbTypeV23;
+
+    window.HerbItemV23 =
+        HerbItemV23;
+
+    window.HerbPatchV23 =
+        HerbPatchV23;
+
+    window.registerHerbV23 =
+        registerHerbV23;
+
+    window.getHerbV23 =
+        getHerbV23;
+
+    window.registerHerbPatchV23 =
+        registerHerbPatchV23;
+
+    window.getHerbPatchV23 =
+        getHerbPatchV23;
+
+    window.getHerbalismLevelV23 =
+        getHerbalismLevelV23;
+
+    window.getHerbalismLuckV23 =
+        getHerbalismLuckV23;
+
+    window.startHerbalismV23 =
+        startHerbalismV23;
+
+    window.updateHerbalismV23 =
+        updateHerbalismV23;
+
+    window.completeHerbalismV23 =
+        completeHerbalismV23;
+
+    window.cancelHerbalismV23 =
+        cancelHerbalismV23;
+
+    window.findNearestHerbPatchV23 =
+        findNearestHerbPatchV23;
+
+    window.updateHerbPatchV23 =
+        updateHerbPatchV23;
+
+    window.updateAllHerbPatchesV23 =
+        updateAllHerbPatchesV23;
+
+    window.getHerbalismSaveDataV23 =
+        getHerbalismSaveDataV23;
+
+    window.loadHerbalismSaveDataV23 =
+        loadHerbalismSaveDataV23;
+}
+
+
+//================================================
+// AUTO UPDATE
+//================================================
+
+if (typeof setInterval === "function") {
+
+    setInterval(
+        () => {
+
+            if (
+                !HerbalismSystemV23.enabled
+            ) {
+                return;
+            }
+
+            updateAllHerbPatchesV23();
+
+            for (
+                const patchId of
+                HerbalismSystemV23
+                    .activeSessions
+                    .keys()
+            ) {
+                updateHerbalismV23(
+                    patchId
+                );
+            }
+
+        },
+        250
+    );
+}
+
+
+//================================================
+// END HERBALISM SYSTEM V23
+//================================================
+                // js/systems/alchemy.js
+//================================================
+// HERO OF WIND LAND
+// ALCHEMY SYSTEM V24
+//================================================
+
+const AlchemySystemV24 = {
+    enabled: true,
+    recipes: new Map(),
+    activeBrews: new Map(),
+
+    statistics: {
+        attempts: 0,
+        successfulBrews: 0,
+        failedBrews: 0,
+        criticalBrews: 0,
+        totalPotions: 0,
+        totalExp: 0,
+        rarePotions: 0
+    },
+
+    config: {
+        baseSuccessRate: 0.85,
+        criticalChance: 0.08,
+        criticalMultiplier: 2,
+        minBrewTime: 500,
+        maxBrewTime: 10000
+    }
+};
+
+
+//================================================
+// ALCHEMY RARITY
+//================================================
+
+const AlchemyRarityV24 = {
+    COMMON: "common",
+    UNCOMMON: "uncommon",
+    RARE: "rare",
+    EPIC: "epic",
+    LEGENDARY: "legendary",
+    MYTHIC: "mythic"
+};
+
+
+//================================================
+// POTION TYPE
+//================================================
+
+const PotionTypeV24 = {
+    HEALTH: "health",
+    MANA: "mana",
+    ENERGY: "energy",
+    ANTIDOTE: "antidote",
+    BUFF: "buff",
+    FIRE: "fire",
+    ICE: "ice",
+    WIND: "wind",
+    SHADOW: "shadow",
+    HOLY: "holy",
+    ELIXIR: "elixir"
+};
+
+
+//================================================
+// ALCHEMY RECIPE CLASS
+//================================================
+
+class AlchemyRecipeV24 {
+
+    constructor(config = {}) {
+
+        this.id =
+            config.id ||
+            "recipe_" +
+            Math.random()
+                .toString(36)
+                .slice(2);
+
+        this.name =
+            config.name ||
+            "Unknown Recipe";
+
+        this.description =
+            config.description || "";
+
+        this.outputId =
+            config.outputId ||
+            null;
+
+        this.outputName =
+            config.outputName ||
+            this.name;
+
+        this.outputType =
+            config.outputType ||
+            PotionTypeV24.HEALTH;
+
+        this.rarity =
+            config.rarity ||
+            AlchemyRarityV24.COMMON;
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(config.requiredLevel) || 1
+            );
+
+        this.ingredients =
+            Array.isArray(config.ingredients)
+                ? config.ingredients.map(
+                    ingredient => ({
+                        id: ingredient.id,
+                        amount: Math.max(
+                            1,
+                            Number(
+                                ingredient.amount
+                            ) || 1
+                        )
+                    })
+                )
+                : [];
+
+        this.outputAmount =
+            Math.max(
+                1,
+                Number(config.outputAmount) || 1
+            );
+
+        this.exp =
+            Math.max(
+                0,
+                Number(config.exp) || 1
+            );
+
+        this.brewTime =
+            Math.max(
+                AlchemySystemV24
+                    .config
+                    .minBrewTime,
+                Math.min(
+                    AlchemySystemV24
+                        .config
+                        .maxBrewTime,
+                    Number(config.brewTime) ||
+                    2000
+                )
+            );
+
+        this.successRate =
+            Math.max(
+                0.05,
+                Math.min(
+                    1,
+                    Number(config.successRate) ||
+                    AlchemySystemV24
+                        .config
+                        .baseSuccessRate
+                )
+            );
+
+        this.value =
+            Math.max(
+                0,
+                Number(config.value) || 1
+            );
+
+        this.effect =
+            config.effect || {};
+    }
+
+}
+
+
+//================================================
+// REGISTER RECIPE
+//================================================
+
+function registerAlchemyRecipeV24(config) {
+
+    const recipe =
+        config instanceof AlchemyRecipeV24
+            ? config
+            : new AlchemyRecipeV24(config);
+
+    AlchemySystemV24.recipes.set(
+        recipe.id,
+        recipe
+    );
+
+    return recipe;
+}
+
+
+//================================================
+// GET RECIPE
+//================================================
+
+function getAlchemyRecipeV24(recipeId) {
+
+    return AlchemySystemV24
+        .recipes
+        .get(recipeId) || null;
+}
+
+
+//================================================
+// GET PLAYER
+//================================================
+
+function getAlchemyPlayerV24() {
+
+    return typeof getPlayerSkillCaster ===
+        "function"
+        ? getPlayerSkillCaster()
+        : null;
+}
+
+
+//================================================
+// GET ALCHEMY LEVEL
+//================================================
+
+function getAlchemyLevelV24() {
+
+    const player =
+        getAlchemyPlayerV24();
+
+    if (!player) {
+        return 1;
+    }
+
+    return Math.max(
+        1,
+        Number(player.alchemyLevel) ||
+        Number(player.level) ||
+        1
+    );
+}
+
+
+//================================================
+// GET ALCHEMY LUCK
+//================================================
+
+function getAlchemyLuckV24() {
+
+    const player =
+        getAlchemyPlayerV24();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.alchemyLuck) ||
+        Number(player.luck) ||
+        0
+    );
+}
+
+
+//================================================
+// GET INVENTORY AMOUNT
+//================================================
+
+function getAlchemyInventoryAmountV24(itemId) {
+
+    if (
+        typeof getInventoryItemAmountV9 ===
+        "function"
+    ) {
+        return Math.max(
+            0,
+            Number(
+                getInventoryItemAmountV9(
+                    itemId
+                )
+            ) || 0
+        );
+    }
+
+    if (
+        typeof InventorySystemV9 !==
+        "undefined" &&
+        InventorySystemV9.items
+    ) {
+
+        const item =
+            InventorySystemV9.items.get(
+                itemId
+            );
+
+        return item
+            ? Math.max(
+                0,
+                Number(item.amount) || 0
+            )
+            : 0;
+    }
+
+    return 0;
+}
+
+
+//================================================
+// CHECK INGREDIENTS
+//================================================
+
+function canCraftAlchemyRecipeV24(recipe) {
+
+    if (!recipe) {
+        return false;
+    }
+
+    if (
+        getAlchemyLevelV24() <
+        recipe.requiredLevel
+    ) {
+        return false;
+    }
+
+    for (
+        const ingredient of
+        recipe.ingredients
+    ) {
+        if (
+            getAlchemyInventoryAmountV24(
+                ingredient.id
+            ) <
+            ingredient.amount
+        ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+//================================================
+// REMOVE INGREDIENT
+//================================================
+
+function removeAlchemyIngredientV24(
+    itemId,
+    amount
+) {
+
+    if (
+        typeof removeInventoryItemV9 ===
+        "function"
+    ) {
+        return removeInventoryItemV9(
+            itemId,
+            amount
+        );
+    }
+
+    return false;
+}
+
+
+//================================================
+// ADD OUTPUT
+//================================================
+
+function addAlchemyOutputV24(
+    itemId,
+    amount
+) {
+
+    if (
+        typeof addInventoryItemV9 ===
+        "function"
+    ) {
+        return addInventoryItemV9(
+            itemId,
+            amount
+        );
+    }
+
+    return false;
+}
+
+
+//================================================
+// SUCCESS RATE
+//================================================
+
+function getAlchemySuccessRateV24(recipe) {
+
+    if (!recipe) {
+        return 0;
+    }
+
+    const level =
+        getAlchemyLevelV24();
+
+    const luck =
+        getAlchemyLuckV24();
+
+    const levelBonus =
+        Math.max(
+            0,
+            level -
+            recipe.requiredLevel
+        ) * 0.005;
+
+    const luckBonus =
+        luck * 0.002;
+
+    return Math.max(
+        0.05,
+        Math.min(
+            0.99,
+            recipe.successRate +
+            levelBonus +
+            luckBonus
+        )
+    );
+}
+
+
+//================================================
+// START BREW
+//================================================
+
+function startAlchemyBrewV24(recipeId) {
+
+    const recipe =
+        getAlchemyRecipeV24(recipeId);
+
+    if (!recipe) {
+
+        AlchemySystemV24
+            .statistics
+            .failedBrews++;
+
+        return {
+            success: false,
+            reason: "recipe_not_found"
+        };
+    }
+
+    if (
+        AlchemySystemV24
+            .activeBrews
+            .has(recipeId)
+    ) {
+        return {
+            success: false,
+            reason: "already_brewing"
+        };
+    }
+
+    if (
+        getAlchemyLevelV24() <
+        recipe.requiredLevel
+    ) {
+        return {
+            success: false,
+            reason: "level_too_low"
+        };
+    }
+
+    if (
+        !canCraftAlchemyRecipeV24(
+            recipe
+        )
+    ) {
+        return {
+            success: false,
+            reason: "missing_ingredients"
+        };
+    }
+
+    for (
+        const ingredient of
+        recipe.ingredients
+    ) {
+        removeAlchemyIngredientV24(
+            ingredient.id,
+            ingredient.amount
+        );
+    }
+
+    const now =
+        Date.now();
+
+    const session = {
+        recipeId,
+        startedAt: now,
+        finishAt:
+            now +
+            recipe.brewTime,
+        duration:
+            recipe.brewTime,
+        completed: false
+    };
+
+    AlchemySystemV24
+        .activeBrews
+        .set(
+            recipeId,
+            session
+        );
+
+    AlchemySystemV24
+        .statistics
+        .attempts++;
+
+    return {
+        success: true,
+        recipeId,
+        finishAt:
+            session.finishAt,
+        duration:
+            session.duration
+    };
+}
+
+
+//================================================
+// UPDATE BREW
+//================================================
+
+function updateAlchemyBrewV24(recipeId) {
+
+    const session =
+        AlchemySystemV24
+            .activeBrews
+            .get(recipeId);
+
+    if (!session) {
+        return null;
+    }
+
+    const remaining =
+        Math.max(
+            0,
+            session.finishAt -
+            Date.now()
+        );
+
+    if (remaining <= 0) {
+        session.completed =
+            true;
+    }
+
+    return {
+        ...session,
+        remaining,
+        ready: remaining <= 0
+    };
+}
+
+
+//================================================
+// COMPLETE BREW
+//================================================
+
+function completeAlchemyBrewV24(recipeId) {
+
+    const session =
+        AlchemySystemV24
+            .activeBrews
+            .get(recipeId);
+
+    if (!session) {
+        return {
+            success: false,
+            reason: "no_active_brew"
+        };
+    }
+
+    if (
+        Date.now() <
+        session.finishAt
+    ) {
+        return {
+            success: false,
+            reason: "brew_not_finished",
+            remaining:
+                session.finishAt -
+                Date.now()
+        };
+    }
+
+    const recipe =
+        getAlchemyRecipeV24(
+            session.recipeId
+        );
+
+    AlchemySystemV24
+        .activeBrews
+        .delete(recipeId);
+
+    if (!recipe) {
+
+        AlchemySystemV24
+            .statistics
+            .failedBrews++;
+
+        return {
+            success: false,
+            reason: "recipe_missing"
+        };
+    }
+
+    const successRate =
+        getAlchemySuccessRateV24(
+            recipe
+        );
+
+    const brewed =
+        Math.random() <
+        successRate;
+
+    if (!brewed) {
+
+        AlchemySystemV24
+            .statistics
+            .failedBrews++;
+
+        return {
+            success: false,
+            brewed: false,
+            reason: "alchemy_failed",
+            successRate
+        };
+    }
+
+    const luck =
+        getAlchemyLuckV24();
+
+    const criticalChance =
+        Math.min(
+            0.45,
+            AlchemySystemV24
+                .config
+                .criticalChance +
+            luck * 0.003
+        );
+
+    const critical =
+        Math.random() <
+        criticalChance;
+
+    let amount =
+        recipe.outputAmount;
+
+    if (critical) {
+        amount *=
+            AlchemySystemV24
+                .config
+                .criticalMultiplier;
+
+        AlchemySystemV24
+            .statistics
+            .criticalBrews++;
+    }
+
+    addAlchemyOutputV24(
+        recipe.outputId,
+        amount
+    );
+
+    const gainedExp =
+        critical
+            ? Math.floor(
+                recipe.exp * 1.5
+            )
+            : recipe.exp;
+
+    const player =
+        getAlchemyPlayerV24();
+
+    if (player) {
+
+        if (
+            typeof player.alchemyExp ===
+            "number"
+        ) {
+            player.alchemyExp +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.exp ===
+            "number"
+        ) {
+            player.exp +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.experience ===
+            "number"
+        ) {
+            player.experience +=
+                gainedExp;
+        }
+    }
+
+    AlchemySystemV24
+        .statistics
+        .successfulBrews++;
+
+    AlchemySystemV24
+        .statistics
+        .totalPotions +=
+        amount;
+
+    AlchemySystemV24
+        .statistics
+        .totalExp +=
+        gainedExp;
+
+    if (
+        recipe.rarity !==
+        AlchemyRarityV24.COMMON
+    ) {
+        AlchemySystemV24
+            .statistics
+            .rarePotions++;
+    }
+
+    return {
+        success: true,
+        brewed: true,
+        recipeId: recipe.id,
+        outputId: recipe.outputId,
+        outputName:
+            recipe.outputName,
+        outputType:
+            recipe.outputType,
+        rarity:
+            recipe.rarity,
+        amount,
+        critical,
+        exp: gainedExp,
+        value:
+            recipe.value * amount,
+        successRate,
+        effect:
+            recipe.effect
+    };
+}
+
+
+//================================================
+// CANCEL BREW
+//================================================
+
+function cancelAlchemyBrewV24(recipeId) {
+
+    if (
+        !AlchemySystemV24
+            .activeBrews
+            .has(recipeId)
+    ) {
+        return false;
+    }
+
+    AlchemySystemV24
+        .activeBrews
+        .delete(recipeId);
+
+    return true;
+}
+
+
+//================================================
+// GET AVAILABLE RECIPES
+//================================================
+
+function getAvailableAlchemyRecipesV24() {
+
+    const level =
+        getAlchemyLevelV24();
+
+    return Array.from(
+        AlchemySystemV24
+            .recipes
+            .values()
+    ).filter(
+        recipe =>
+            recipe.requiredLevel <=
+            level
+    );
+}
+
+
+//================================================
+// GET CRAFTABLE RECIPES
+//================================================
+
+function getCraftableAlchemyRecipesV24() {
+
+    return getAvailableAlchemyRecipesV24()
+        .filter(
+            recipe =>
+                canCraftAlchemyRecipeV24(
+                    recipe
+                )
+        );
+}
+
+
+//================================================
+// DEFAULT RECIPES
+//================================================
+
+registerAlchemyRecipeV24({
+    id: "recipe_small_health_potion",
+    name: "Small Health Potion",
+    outputId: "small_health_potion",
+    outputName: "Small Health Potion",
+    outputType: PotionTypeV24.HEALTH,
+    rarity: AlchemyRarityV24.COMMON,
+    requiredLevel: 1,
+    ingredients: [
+        {
+            id: "green_leaf",
+            amount: 2
+        },
+        {
+            id: "red_herb",
+            amount: 1
+        }
+    ],
+    outputAmount: 1,
+    exp: 15,
+    brewTime: 1500,
+    successRate: 0.95,
+    value: 60,
+    effect: {
+        hpRestore: 80
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_small_mana_potion",
+    name: "Small Mana Potion",
+    outputId: "small_mana_potion",
+    outputName: "Small Mana Potion",
+    outputType: PotionTypeV24.MANA,
+    rarity: AlchemyRarityV24.UNCOMMON,
+    requiredLevel: 8,
+    ingredients: [
+        {
+            id: "blue_herb",
+            amount: 2
+        },
+        {
+            id: "green_leaf",
+            amount: 2
+        }
+    ],
+    outputAmount: 1,
+    exp: 30,
+    brewTime: 2200,
+    successRate: 0.9,
+    value: 140,
+    effect: {
+        manaRestore: 100
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_antidote_potion",
+    name: "Antidote Potion",
+    outputId: "antidote_potion",
+    outputName: "Antidote Potion",
+    outputType: PotionTypeV24.ANTIDOTE,
+    rarity: AlchemyRarityV24.UNCOMMON,
+    requiredLevel: 15,
+    ingredients: [
+        {
+            id: "antidote_leaf",
+            amount: 3
+        },
+        {
+            id: "blue_herb",
+            amount: 1
+        }
+    ],
+    outputAmount: 1,
+    exp: 45,
+    brewTime: 2600,
+    successRate: 0.88,
+    value: 240,
+    effect: {
+        removePoison: true,
+        removeBleed: true
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_fire_elixir",
+    name: "Fire Elixir",
+    outputId: "fire_elixir",
+    outputName: "Fire Elixir",
+    outputType: PotionTypeV24.FIRE,
+    rarity: AlchemyRarityV24.RARE,
+    requiredLevel: 25,
+    ingredients: [
+        {
+            id: "fire_blossom",
+            amount: 2
+        },
+        {
+            id: "red_herb",
+            amount: 3
+        }
+    ],
+    outputAmount: 1,
+    exp: 120,
+    brewTime: 3500,
+    successRate: 0.78,
+    value: 850,
+    effect: {
+        fireDamageBonus: 0.2,
+        duration: 300000
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_ice_elixir",
+    name: "Ice Elixir",
+    outputId: "ice_elixir",
+    outputName: "Ice Elixir",
+    outputType: PotionTypeV24.ICE,
+    rarity: AlchemyRarityV24.RARE,
+    requiredLevel: 30,
+    ingredients: [
+        {
+            id: "ice_lotus",
+            amount: 2
+        },
+        {
+            id: "blue_herb",
+            amount: 3
+        }
+    ],
+    outputAmount: 1,
+    exp: 140,
+    brewTime: 3800,
+    successRate: 0.76,
+    value: 1100,
+    effect: {
+        iceDamageBonus: 0.2,
+        duration: 300000
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_wind_elixir",
+    name: "Wind Elixir",
+    outputId: "wind_elixir",
+    outputName: "Wind Elixir",
+    outputType: PotionTypeV24.WIND,
+    rarity: AlchemyRarityV24.EPIC,
+    requiredLevel: 42,
+    ingredients: [
+        {
+            id: "wind_orchid",
+            amount: 2
+        },
+        {
+            id: "moon_flower",
+            amount: 2
+        },
+        {
+            id: "blue_herb",
+            amount: 2
+        }
+    ],
+    outputAmount: 1,
+    exp: 350,
+    brewTime: 5000,
+    successRate: 0.65,
+    value: 4200,
+    effect: {
+        movementSpeedBonus: 0.15,
+        attackSpeedBonus: 0.1,
+        duration: 420000
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_shadow_elixir",
+    name: "Shadow Elixir",
+    outputId: "shadow_elixir",
+    outputName: "Shadow Elixir",
+    outputType: PotionTypeV24.SHADOW,
+    rarity: AlchemyRarityV24.EPIC,
+    requiredLevel: 48,
+    ingredients: [
+        {
+            id: "shadow_mandragora",
+            amount: 2
+        },
+        {
+            id: "crystal_bloom",
+            amount: 1
+        }
+    ],
+    outputAmount: 1,
+    exp: 500,
+    brewTime: 6000,
+    successRate: 0.58,
+    value: 7500,
+    effect: {
+        criticalChanceBonus: 0.1,
+        evasionBonus: 0.08,
+        duration: 420000
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_dragon_elixir",
+    name: "Dragon Elixir",
+    outputId: "dragon_elixir",
+    outputName: "Dragon Elixir",
+    outputType: PotionTypeV24.ELIXIR,
+    rarity: AlchemyRarityV24.LEGENDARY,
+    requiredLevel: 60,
+    ingredients: [
+        {
+            id: "dragon_heart_flower",
+            amount: 1
+        },
+        {
+            id: "dragon_lotus",
+            amount: 1
+        },
+        {
+            id: "crystal_bloom",
+            amount: 2
+        }
+    ],
+    outputAmount: 1,
+    exp: 1500,
+    brewTime: 8000,
+    successRate: 0.42,
+    value: 35000,
+    effect: {
+        maxHpBonus: 0.2,
+        attackBonus: 0.15,
+        defenseBonus: 0.15,
+        duration: 600000
+    }
+});
+
+
+registerAlchemyRecipeV24({
+    id: "recipe_world_elixir",
+    name: "World Elixir",
+    outputId: "world_elixir",
+    outputName: "World Elixir",
+    outputType: PotionTypeV24.HOLY,
+    rarity: AlchemyRarityV24.MYTHIC,
+    requiredLevel: 80,
+    ingredients: [
+        {
+            id: "world_bloom",
+            amount: 1
+        },
+        {
+            id: "world_tree_leaf",
+            amount: 1
+        },
+        {
+            id: "dragon_heart_flower",
+            amount: 2
+        }
+    ],
+    outputAmount: 1,
+    exp: 8000,
+    brewTime: 10000,
+    successRate: 0.25,
+    value: 250000,
+    effect: {
+        maxHpBonus: 0.3,
+        maxManaBonus: 0.3,
+        attackBonus: 0.25,
+        defenseBonus: 0.25,
+        allElementBonus: 0.2,
+        duration: 900000
+    }
+});
+
+
+//================================================
+// UPDATE ALCHEMY
+//================================================
+
+function updateAlchemySystemV24() {
+
+    for (
+        const recipeId of
+        AlchemySystemV24
+            .activeBrews
+            .keys()
+    ) {
+        updateAlchemyBrewV24(
+            recipeId
+        );
+    }
+}
+
+
+//================================================
+// SAVE DATA
+//================================================
+
+function getAlchemySaveDataV24() {
+
+    return {
+        statistics: {
+            ...AlchemySystemV24.statistics
+        }
+    };
+}
+
+
+//================================================
+// LOAD DATA
+//================================================
+
+function loadAlchemySaveDataV24(data) {
+
+    if (!data) {
+        return;
+    }
+
+    if (data.statistics) {
+        AlchemySystemV24.statistics = {
+            ...AlchemySystemV24.statistics,
+            ...data.statistics
+        };
+    }
+}
+
+
+//================================================
+// EXPORT
+//================================================
+
+if (typeof window !== "undefined") {
+
+    window.AlchemySystemV24 =
+        AlchemySystemV24;
+
+    window.AlchemyRarityV24 =
+        AlchemyRarityV24;
+
+    window.PotionTypeV24 =
+        PotionTypeV24;
+
+    window.AlchemyRecipeV24 =
+        AlchemyRecipeV24;
+
+    window.registerAlchemyRecipeV24 =
+        registerAlchemyRecipeV24;
+
+    window.getAlchemyRecipeV24 =
+        getAlchemyRecipeV24;
+
+    window.getAlchemyLevelV24 =
+        getAlchemyLevelV24;
+
+    window.getAlchemyLuckV24 =
+        getAlchemyLuckV24;
+
+    window.canCraftAlchemyRecipeV24 =
+        canCraftAlchemyRecipeV24;
+
+    window.startAlchemyBrewV24 =
+        startAlchemyBrewV24;
+
+    window.updateAlchemyBrewV24 =
+        updateAlchemyBrewV24;
+
+    window.completeAlchemyBrewV24 =
+        completeAlchemyBrewV24;
+
+    window.cancelAlchemyBrewV24 =
+        cancelAlchemyBrewV24;
+
+    window.getAvailableAlchemyRecipesV24 =
+        getAvailableAlchemyRecipesV24;
+
+    window.getCraftableAlchemyRecipesV24 =
+        getCraftableAlchemyRecipesV24;
+
+    window.getAlchemySaveDataV24 =
+        getAlchemySaveDataV24;
+
+    window.loadAlchemySaveDataV24 =
+        loadAlchemySaveDataV24;
+}
+
+
+//================================================
+// AUTO UPDATE
+//================================================
+
+if (typeof setInterval === "function") {
+
+    setInterval(
+        () => {
+
+            if (
+                !AlchemySystemV24.enabled
+            ) {
+                return;
+            }
+
+            updateAlchemySystemV24();
+
+        },
+        250
+    );
+}
+
+
+//================================================
+// END ALCHEMY SYSTEM V24
+//================================================
+                // js/systems/blacksmith.js
+//================================================
+// HERO OF WIND LAND
+// BLACKSMITH SYSTEM V25
+//================================================
+
+const BlacksmithSystemV25 = {
+    enabled: true,
+    recipes: new Map(),
+    activeCrafts: new Map(),
+
+    statistics: {
+        attempts: 0,
+        successfulCrafts: 0,
+        failedCrafts: 0,
+        criticalCrafts: 0,
+        totalItems: 0,
+        totalExp: 0,
+        rareItems: 0
+    },
+
+    config: {
+        baseSuccessRate: 0.88,
+        criticalChance: 0.06,
+        criticalMultiplier: 2,
+        minCraftTime: 800,
+        maxCraftTime: 15000
+    }
+};
+
+
+//================================================
+// BLACKSMITH RARITY
+//================================================
+
+const BlacksmithRarityV25 = {
+    COMMON: "common",
+    UNCOMMON: "uncommon",
+    RARE: "rare",
+    EPIC: "epic",
+    LEGENDARY: "legendary",
+    MYTHIC: "mythic"
+};
+
+
+//================================================
+// BLACKSMITH ITEM TYPE
+//================================================
+
+const BlacksmithItemTypeV25 = {
+    WEAPON: "weapon",
+    ARMOR: "armor",
+    HELMET: "helmet",
+    BOOTS: "boots",
+    GLOVES: "gloves",
+    SHIELD: "shield",
+    ACCESSORY: "accessory",
+    MATERIAL: "material"
+};
+
+
+//================================================
+// BLACKSMITH RECIPE CLASS
+//================================================
+
+class BlacksmithRecipeV25 {
+
+    constructor(config = {}) {
+
+        this.id =
+            config.id ||
+            "blacksmith_recipe_" +
+            Math.random()
+                .toString(36)
+                .slice(2);
+
+        this.name =
+            config.name ||
+            "Unknown Blacksmith Recipe";
+
+        this.description =
+            config.description || "";
+
+        this.outputId =
+            config.outputId ||
+            null;
+
+        this.outputName =
+            config.outputName ||
+            this.name;
+
+        this.outputType =
+            config.outputType ||
+            BlacksmithItemTypeV25.WEAPON;
+
+        this.rarity =
+            config.rarity ||
+            BlacksmithRarityV25.COMMON;
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(config.requiredLevel) || 1
+            );
+
+        this.ingredients =
+            Array.isArray(config.ingredients)
+                ? config.ingredients.map(
+                    ingredient => ({
+                        id: ingredient.id,
+                        amount: Math.max(
+                            1,
+                            Number(
+                                ingredient.amount
+                            ) || 1
+                        )
+                    })
+                )
+                : [];
+
+        this.outputAmount =
+            Math.max(
+                1,
+                Number(config.outputAmount) || 1
+            );
+
+        this.exp =
+            Math.max(
+                0,
+                Number(config.exp) || 1
+            );
+
+        this.craftTime =
+            Math.max(
+                BlacksmithSystemV25
+                    .config
+                    .minCraftTime,
+                Math.min(
+                    BlacksmithSystemV25
+                        .config
+                        .maxCraftTime,
+                    Number(config.craftTime) ||
+                    2500
+                )
+            );
+
+        this.successRate =
+            Math.max(
+                0.05,
+                Math.min(
+                    1,
+                    Number(config.successRate) ||
+                    BlacksmithSystemV25
+                        .config
+                        .baseSuccessRate
+                )
+            );
+
+        this.value =
+            Math.max(
+                0,
+                Number(config.value) || 1
+            );
+
+        this.stats =
+            config.stats || {};
+    }
+
+}
+
+
+//================================================
+// REGISTER RECIPE
+//================================================
+
+function registerBlacksmithRecipeV25(config) {
+
+    const recipe =
+        config instanceof BlacksmithRecipeV25
+            ? config
+            : new BlacksmithRecipeV25(config);
+
+    BlacksmithSystemV25.recipes.set(
+        recipe.id,
+        recipe
+    );
+
+    return recipe;
+}
+
+
+//================================================
+// GET RECIPE
+//================================================
+
+function getBlacksmithRecipeV25(recipeId) {
+
+    return BlacksmithSystemV25
+        .recipes
+        .get(recipeId) || null;
+}
+
+
+//================================================
+// GET PLAYER
+//================================================
+
+function getBlacksmithPlayerV25() {
+
+    return typeof getPlayerSkillCaster ===
+        "function"
+        ? getPlayerSkillCaster()
+        : null;
+}
+
+
+//================================================
+// GET BLACKSMITH LEVEL
+//================================================
+
+function getBlacksmithLevelV25() {
+
+    const player =
+        getBlacksmithPlayerV25();
+
+    if (!player) {
+        return 1;
+    }
+
+    return Math.max(
+        1,
+        Number(player.blacksmithLevel) ||
+        Number(player.smithingLevel) ||
+        Number(player.level) ||
+        1
+    );
+}
+
+
+//================================================
+// GET BLACKSMITH LUCK
+//================================================
+
+function getBlacksmithLuckV25() {
+
+    const player =
+        getBlacksmithPlayerV25();
+
+    if (!player) {
+        return 0;
+    }
+
+    return Math.max(
+        0,
+        Number(player.blacksmithLuck) ||
+        Number(player.luck) ||
+        0
+    );
+}
+
+
+//================================================
+// INVENTORY AMOUNT
+//================================================
+
+function getBlacksmithInventoryAmountV25(
+    itemId
+) {
+
+    if (
+        typeof getInventoryItemAmountV9 ===
+        "function"
+    ) {
+        return Math.max(
+            0,
+            Number(
+                getInventoryItemAmountV9(
+                    itemId
+                )
+            ) || 0
+        );
+    }
+
+    if (
+        typeof InventorySystemV9 !==
+        "undefined" &&
+        InventorySystemV9.items
+    ) {
+
+        const item =
+            InventorySystemV9.items.get(
+                itemId
+            );
+
+        return item
+            ? Math.max(
+                0,
+                Number(item.amount) || 0
+            )
+            : 0;
+    }
+
+    return 0;
+}
+
+
+//================================================
+// CHECK MATERIALS
+//================================================
+
+function canCraftBlacksmithRecipeV25(
+    recipe
+) {
+
+    if (!recipe) {
+        return false;
+    }
+
+    if (
+        getBlacksmithLevelV25() <
+        recipe.requiredLevel
+    ) {
+        return false;
+    }
+
+    for (
+        const ingredient of
+        recipe.ingredients
+    ) {
+
+        if (
+            getBlacksmithInventoryAmountV25(
+                ingredient.id
+            ) <
+            ingredient.amount
+        ) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+//================================================
+// REMOVE MATERIAL
+//================================================
+
+function removeBlacksmithMaterialV25(
+    itemId,
+    amount
+) {
+
+    if (
+        typeof removeInventoryItemV9 ===
+        "function"
+    ) {
+        return removeInventoryItemV9(
+            itemId,
+            amount
+        );
+    }
+
+    return false;
+}
+
+
+//================================================
+// ADD CRAFTED ITEM
+//================================================
+
+function addBlacksmithOutputV25(
+    itemId,
+    amount
+) {
+
+    if (
+        typeof addInventoryItemV9 ===
+        "function"
+    ) {
+        return addInventoryItemV9(
+            itemId,
+            amount
+        );
+    }
+
+    return false;
+}
+
+
+//================================================
+// SUCCESS RATE
+//================================================
+
+function getBlacksmithSuccessRateV25(
+    recipe
+) {
+
+    if (!recipe) {
+        return 0;
+    }
+
+    const level =
+        getBlacksmithLevelV25();
+
+    const luck =
+        getBlacksmithLuckV25();
+
+    const levelBonus =
+        Math.max(
+            0,
+            level -
+            recipe.requiredLevel
+        ) * 0.004;
+
+    const luckBonus =
+        luck * 0.0015;
+
+    return Math.max(
+        0.05,
+        Math.min(
+            0.99,
+            recipe.successRate +
+            levelBonus +
+            luckBonus
+        )
+    );
+}
+
+
+//================================================
+// START CRAFT
+//================================================
+
+function startBlacksmithCraftV25(
+    recipeId
+) {
+
+    const recipe =
+        getBlacksmithRecipeV25(
+            recipeId
+        );
+
+    if (!recipe) {
+
+        BlacksmithSystemV25
+            .statistics
+            .failedCrafts++;
+
+        return {
+            success: false,
+            reason: "recipe_not_found"
+        };
+    }
+
+    if (
+        BlacksmithSystemV25
+            .activeCrafts
+            .has(recipeId)
+    ) {
+        return {
+            success: false,
+            reason: "already_crafting"
+        };
+    }
+
+    if (
+        getBlacksmithLevelV25() <
+        recipe.requiredLevel
+    ) {
+        return {
+            success: false,
+            reason: "level_too_low"
+        };
+    }
+
+    if (
+        !canCraftBlacksmithRecipeV25(
+            recipe
+        )
+    ) {
+        return {
+            success: false,
+            reason: "missing_materials"
+        };
+    }
+
+    for (
+        const ingredient of
+        recipe.ingredients
+    ) {
+        removeBlacksmithMaterialV25(
+            ingredient.id,
+            ingredient.amount
+        );
+    }
+
+    const now =
+        Date.now();
+
+    const session = {
+        recipeId,
+        startedAt: now,
+        finishAt:
+            now +
+            recipe.craftTime,
+        duration:
+            recipe.craftTime,
+        completed: false
+    };
+
+    BlacksmithSystemV25
+        .activeCrafts
+        .set(
+            recipeId,
+            session
+        );
+
+    BlacksmithSystemV25
+        .statistics
+        .attempts++;
+
+    return {
+        success: true,
+        recipeId,
+        finishAt:
+            session.finishAt,
+        duration:
+            session.duration
+    };
+}
+
+
+//================================================
+// UPDATE CRAFT
+//================================================
+
+function updateBlacksmithCraftV25(
+    recipeId
+) {
+
+    const session =
+        BlacksmithSystemV25
+            .activeCrafts
+            .get(recipeId);
+
+    if (!session) {
+        return null;
+    }
+
+    const remaining =
+        Math.max(
+            0,
+            session.finishAt -
+            Date.now()
+        );
+
+    if (remaining <= 0) {
+        session.completed =
+            true;
+    }
+
+    return {
+        ...session,
+        remaining,
+        ready: remaining <= 0
+    };
+}
+
+
+//================================================
+// COMPLETE CRAFT
+//================================================
+
+function completeBlacksmithCraftV25(
+    recipeId
+) {
+
+    const session =
+        BlacksmithSystemV25
+            .activeCrafts
+            .get(recipeId);
+
+    if (!session) {
+        return {
+            success: false,
+            reason: "no_active_craft"
+        };
+    }
+
+    if (
+        Date.now() <
+        session.finishAt
+    ) {
+        return {
+            success: false,
+            reason: "craft_not_finished",
+            remaining:
+                session.finishAt -
+                Date.now()
+        };
+    }
+
+    const recipe =
+        getBlacksmithRecipeV25(
+            session.recipeId
+        );
+
+    BlacksmithSystemV25
+        .activeCrafts
+        .delete(recipeId);
+
+    if (!recipe) {
+
+        BlacksmithSystemV25
+            .statistics
+            .failedCrafts++;
+
+        return {
+            success: false,
+            reason: "recipe_missing"
+        };
+    }
+
+    const successRate =
+        getBlacksmithSuccessRateV25(
+            recipe
+        );
+
+    const crafted =
+        Math.random() <
+        successRate;
+
+    if (!crafted) {
+
+        BlacksmithSystemV25
+            .statistics
+            .failedCrafts++;
+
+        return {
+            success: false,
+            crafted: false,
+            reason: "craft_failed",
+            successRate
+        };
+    }
+
+    const luck =
+        getBlacksmithLuckV25();
+
+    const criticalChance =
+        Math.min(
+            0.4,
+            BlacksmithSystemV25
+                .config
+                .criticalChance +
+            luck * 0.0025
+        );
+
+    const critical =
+        Math.random() <
+        criticalChance;
+
+    let amount =
+        recipe.outputAmount;
+
+    if (critical) {
+
+        amount *=
+            BlacksmithSystemV25
+                .config
+                .criticalMultiplier;
+
+        BlacksmithSystemV25
+            .statistics
+            .criticalCrafts++;
+    }
+
+    addBlacksmithOutputV25(
+        recipe.outputId,
+        amount
+    );
+
+    const gainedExp =
+        critical
+            ? Math.floor(
+                recipe.exp * 1.5
+            )
+            : recipe.exp;
+
+    const player =
+        getBlacksmithPlayerV25();
+
+    if (player) {
+
+        if (
+            typeof player.blacksmithExp ===
+            "number"
+        ) {
+            player.blacksmithExp +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.exp ===
+            "number"
+        ) {
+            player.exp +=
+                gainedExp;
+        }
+
+        if (
+            typeof player.experience ===
+            "number"
+        ) {
+            player.experience +=
+                gainedExp;
+        }
+    }
+
+    BlacksmithSystemV25
+        .statistics
+        .successfulCrafts++;
+
+    BlacksmithSystemV25
+        .statistics
+        .totalItems +=
+        amount;
+
+    BlacksmithSystemV25
+        .statistics
+        .totalExp +=
+        gainedExp;
+
+    if (
+        recipe.rarity !==
+        BlacksmithRarityV25.COMMON
+    ) {
+        BlacksmithSystemV25
+            .statistics
+            .rareItems++;
+    }
+
+    return {
+        success: true,
+        crafted: true,
+        recipeId: recipe.id,
+        outputId: recipe.outputId,
+        outputName:
+            recipe.outputName,
+        outputType:
+            recipe.outputType,
+        rarity:
+            recipe.rarity,
+        amount,
+        critical,
+        exp: gainedExp,
+        value:
+            recipe.value * amount,
+        successRate,
+        stats:
+            recipe.stats
+    };
+}
+
+
+//================================================
+// CANCEL CRAFT
+//================================================
+
+function cancelBlacksmithCraftV25(
+    recipeId
+) {
+
+    if (
+        !BlacksmithSystemV25
+            .activeCrafts
+            .has(recipeId)
+    ) {
+        return false;
+    }
+
+    BlacksmithSystemV25
+        .activeCrafts
+        .delete(recipeId);
+
+    return true;
+}
+
+
+//================================================
+// AVAILABLE RECIPES
+//================================================
+
+function getAvailableBlacksmithRecipesV25() {
+
+    const level =
+        getBlacksmithLevelV25();
+
+    return Array.from(
+        BlacksmithSystemV25
+            .recipes
+            .values()
+    ).filter(
+        recipe =>
+            recipe.requiredLevel <=
+            level
+    );
+}
+
+
+//================================================
+// CRAFTABLE RECIPES
+//================================================
+
+function getCraftableBlacksmithRecipesV25() {
+
+    return getAvailableBlacksmithRecipesV25()
+        .filter(
+            recipe =>
+                canCraftBlacksmithRecipeV25(
+                    recipe
+                )
+        );
+}
+
+
+//================================================
+// DEFAULT MATERIALS
+//================================================
+
+const DefaultBlacksmithMaterialsV25 = [
+    "iron_ore",
+    "copper_ore",
+    "silver_ore",
+    "gold_ore",
+    "mithril_ore",
+    "dragon_steel",
+    "wood",
+    "hard_wood",
+    "leather",
+    "magic_crystal"
+];
+
+
+//================================================
+// DEFAULT RECIPES
+//================================================
+
+registerBlacksmithRecipeV25({
+    id: "recipe_iron_sword",
+    name: "Iron Sword",
+    outputId: "iron_sword",
+    outputName: "Iron Sword",
+    outputType: BlacksmithItemTypeV25.WEAPON,
+    rarity: BlacksmithRarityV25.COMMON,
+    requiredLevel: 1,
+    ingredients: [
+        { id: "iron_ore", amount: 4 },
+        { id: "wood", amount: 2 }
+    ],
+    outputAmount: 1,
+    exp: 25,
+    craftTime: 2200,
+    successRate: 0.95,
+    value: 180,
+    stats: {
+        attack: 12
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_iron_armor",
+    name: "Iron Armor",
+    outputId: "iron_armor",
+    outputName: "Iron Armor",
+    outputType: BlacksmithItemTypeV25.ARMOR,
+    rarity: BlacksmithRarityV25.COMMON,
+    requiredLevel: 4,
+    ingredients: [
+        { id: "iron_ore", amount: 8 },
+        { id: "leather", amount: 3 }
+    ],
+    outputAmount: 1,
+    exp: 45,
+    craftTime: 3000,
+    successRate: 0.93,
+    value: 350,
+    stats: {
+        defense: 18,
+        maxHp: 25
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_steel_sword",
+    name: "Steel Sword",
+    outputId: "steel_sword",
+    outputName: "Steel Sword",
+    outputType: BlacksmithItemTypeV25.WEAPON,
+    rarity: BlacksmithRarityV25.UNCOMMON,
+    requiredLevel: 12,
+    ingredients: [
+        { id: "iron_ore", amount: 6 },
+        { id: "copper_ore", amount: 4 },
+        { id: "hard_wood", amount: 2 }
+    ],
+    outputAmount: 1,
+    exp: 90,
+    craftTime: 4200,
+    successRate: 0.85,
+    value: 950,
+    stats: {
+        attack: 35,
+        criticalChance: 0.02
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_silver_shield",
+    name: "Silver Shield",
+    outputId: "silver_shield",
+    outputName: "Silver Shield",
+    outputType: BlacksmithItemTypeV25.SHIELD,
+    rarity: BlacksmithRarityV25.RARE,
+    requiredLevel: 22,
+    ingredients: [
+        { id: "silver_ore", amount: 8 },
+        { id: "iron_ore", amount: 4 },
+        { id: "leather", amount: 4 }
+    ],
+    outputAmount: 1,
+    exp: 180,
+    craftTime: 5500,
+    successRate: 0.74,
+    value: 3500,
+    stats: {
+        defense: 48,
+        blockChance: 0.08
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_gold_blade",
+    name: "Golden Blade",
+    outputId: "golden_blade",
+    outputName: "Golden Blade",
+    outputType: BlacksmithItemTypeV25.WEAPON,
+    rarity: BlacksmithRarityV25.RARE,
+    requiredLevel: 30,
+    ingredients: [
+        { id: "gold_ore", amount: 7 },
+        { id: "silver_ore", amount: 5 },
+        { id: "magic_crystal", amount: 1 }
+    ],
+    outputAmount: 1,
+    exp: 300,
+    craftTime: 7000,
+    successRate: 0.65,
+    value: 8000,
+    stats: {
+        attack: 85,
+        criticalChance: 0.05
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_mithril_armor",
+    name: "Mithril Armor",
+    outputId: "mithril_armor",
+    outputName: "Mithril Armor",
+    outputType: BlacksmithItemTypeV25.ARMOR,
+    rarity: BlacksmithRarityV25.EPIC,
+    requiredLevel: 42,
+    ingredients: [
+        { id: "mithril_ore", amount: 10 },
+        { id: "silver_ore", amount: 6 },
+        { id: "magic_crystal", amount: 3 }
+    ],
+    outputAmount: 1,
+    exp: 700,
+    craftTime: 9000,
+    successRate: 0.52,
+    value: 35000,
+    stats: {
+        defense: 120,
+        maxHp: 150,
+        magicResistance: 0.08
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_dragon_slayer",
+    name: "Dragon Slayer",
+    outputId: "dragon_slayer",
+    outputName: "Dragon Slayer",
+    outputType: BlacksmithItemTypeV25.WEAPON,
+    rarity: BlacksmithRarityV25.LEGENDARY,
+    requiredLevel: 60,
+    ingredients: [
+        { id: "dragon_steel", amount: 8 },
+        { id: "mithril_ore", amount: 6 },
+        { id: "magic_crystal", amount: 5 }
+    ],
+    outputAmount: 1,
+    exp: 2200,
+    craftTime: 12000,
+    successRate: 0.32,
+    value: 180000,
+    stats: {
+        attack: 280,
+        criticalChance: 0.1,
+        criticalDamage: 0.25,
+        dragonDamageBonus: 0.3
+    }
+});
+
+
+registerBlacksmithRecipeV25({
+    id: "recipe_wind_legend_blade",
+    name: "Wind Legend Blade",
+    outputId: "wind_legend_blade",
+    outputName: "Wind Legend Blade",
+    outputType: BlacksmithItemTypeV25.WEAPON,
+    rarity: BlacksmithRarityV25.MYTHIC,
+    requiredLevel: 80,
+    ingredients: [
+        { id: "dragon_steel", amount: 12 },
+        { id: "world_tree_leaf", amount: 2 },
+        { id: "world_bloom", amount: 1 },
+        { id: "magic_crystal", amount: 10 }
+    ],
+    outputAmount: 1,
+    exp: 10000,
+    craftTime: 15000,
+    successRate: 0.15,
+    value: 1500000,
+    stats: {
+        attack: 750,
+        attackSpeed: 0.15,
+        criticalChance: 0.15,
+        criticalDamage: 0.5,
+        windDamageBonus: 0.35,
+        allElementBonus: 0.15
+    }
+});
+
+
+//================================================
+// UPDATE SYSTEM
+//================================================
+
+function updateBlacksmithSystemV25() {
+
+    for (
+        const recipeId of
+        BlacksmithSystemV25
+            .activeCrafts
+            .keys()
+    ) {
+        updateBlacksmithCraftV25(
+            recipeId
+        );
+    }
+}
+
+
+//================================================
+// SAVE DATA
+//================================================
+
+function getBlacksmithSaveDataV25() {
+
+    return {
+        statistics: {
+            ...BlacksmithSystemV25.statistics
+        }
+    };
+}
+
+
+//================================================
+// LOAD DATA
+//================================================
+
+function loadBlacksmithSaveDataV25(data) {
+
+    if (!data) {
+        return;
+    }
+
+    if (data.statistics) {
+        BlacksmithSystemV25.statistics = {
+            ...BlacksmithSystemV25.statistics,
+            ...data.statistics
+        };
+    }
+}
+
+
+//================================================
+// EXPORT
+//================================================
+
+if (typeof window !== "undefined") {
+
+    window.BlacksmithSystemV25 =
+        BlacksmithSystemV25;
+
+    window.BlacksmithRarityV25 =
+        BlacksmithRarityV25;
+
+    window.BlacksmithItemTypeV25 =
+        BlacksmithItemTypeV25;
+
+    window.BlacksmithRecipeV25 =
+        BlacksmithRecipeV25;
+
+    window.registerBlacksmithRecipeV25 =
+        registerBlacksmithRecipeV25;
+
+    window.getBlacksmithRecipeV25 =
+        getBlacksmithRecipeV25;
+
+    window.getBlacksmithLevelV25 =
+        getBlacksmithLevelV25;
+
+    window.getBlacksmithLuckV25 =
+        getBlacksmithLuckV25;
+
+    window.canCraftBlacksmithRecipeV25 =
+        canCraftBlacksmithRecipeV25;
+
+    window.startBlacksmithCraftV25 =
+        startBlacksmithCraftV25;
+
+    window.updateBlacksmithCraftV25 =
+        updateBlacksmithCraftV25;
+
+    window.completeBlacksmithCraftV25 =
+        completeBlacksmithCraftV25;
+
+    window.cancelBlacksmithCraftV25 =
+        cancelBlacksmithCraftV25;
+
+    window.getAvailableBlacksmithRecipesV25 =
+        getAvailableBlacksmithRecipesV25;
+
+    window.getCraftableBlacksmithRecipesV25 =
+        getCraftableBlacksmithRecipesV25;
+
+    window.getBlacksmithSaveDataV25 =
+        getBlacksmithSaveDataV25;
+
+    window.loadBlacksmithSaveDataV25 =
+        loadBlacksmithSaveDataV25;
+}
+
+
+//================================================
+// AUTO UPDATE
+//================================================
+
+if (typeof setInterval === "function") {
+
+    setInterval(
+        () => {
+
+            if (
+                !BlacksmithSystemV25.enabled
+            ) {
+                return;
+            }
+
+            updateBlacksmithSystemV25();
+
+        },
+        250
+    );
+}
+
+
+//================================================
+// END BLACKSMITH SYSTEM V25
+//================================================
