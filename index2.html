@@ -1,1 +1,2220 @@
+// js/systems/fishing.js
+//================================================
+// HERO OF WIND LAND
+// FISHING SYSTEM V20
+//================================================
 
+const FishingSystemV20 = {
+
+    enabled: true,
+
+    fishingSpots:
+        new Map(),
+
+    fishDatabase:
+        new Map(),
+
+    activeSessions:
+        new Map(),
+
+    statistics: {
+
+        casts:
+            0,
+
+        catches:
+            0,
+
+        failed:
+            0,
+
+        rareCatches:
+            0,
+
+        perfectCatches:
+            0,
+
+        totalValue:
+            0
+
+    },
+
+    config: {
+
+        baseBiteDelayMin:
+            1200,
+
+        baseBiteDelayMax:
+            4500,
+
+        catchWindow:
+            2200,
+
+        perfectWindow:
+            500,
+
+        defaultRespawn:
+            60000,
+
+        rareBonusPerLuck:
+            0.0025
+
+    }
+
+};
+
+
+//================================================
+// FISH RARITY
+//================================================
+
+const FishRarityV20 = {
+
+    COMMON:
+        "common",
+
+    UNCOMMON:
+        "uncommon",
+
+    RARE:
+        "rare",
+
+    EPIC:
+        "epic",
+
+    LEGENDARY:
+        "legendary",
+
+    MYTHIC:
+        "mythic"
+
+};
+
+
+//================================================
+// FISH TYPE
+//================================================
+
+const FishTypeV20 = {
+
+    FRESHWATER:
+        "freshwater",
+
+    SALTWATER:
+        "saltwater",
+
+    RIVER:
+        "river",
+
+    LAKE:
+        "lake",
+
+    OCEAN:
+        "ocean",
+
+    MAGICAL:
+        "magical"
+
+};
+
+
+//================================================
+// FISH CLASS
+//================================================
+
+class FishItemV20 {
+
+    constructor(config = {}) {
+
+        this.id =
+            config.id ||
+            "fish_" +
+            Math.random()
+                .toString(36)
+                .slice(2);
+
+        this.name =
+            config.name ||
+            "Unknown Fish";
+
+        this.type =
+            config.type ||
+            FishTypeV20.FRESHWATER;
+
+        this.rarity =
+            config.rarity ||
+            FishRarityV20.COMMON;
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(
+                    config.requiredLevel
+                ) || 1
+            );
+
+        this.minAmount =
+            Math.max(
+                1,
+                Number(
+                    config.minAmount
+                ) || 1
+            );
+
+        this.maxAmount =
+            Math.max(
+                this.minAmount,
+                Number(
+                    config.maxAmount
+                ) ||
+                this.minAmount
+            );
+
+        this.value =
+            Math.max(
+                0,
+                Number(
+                    config.value
+                ) || 5
+            );
+
+        this.exp =
+            Math.max(
+                0,
+                Number(
+                    config.exp
+                ) || 5
+            );
+
+        this.weightMin =
+            Math.max(
+                0.01,
+                Number(
+                    config.weightMin
+                ) || 0.1
+            );
+
+        this.weightMax =
+            Math.max(
+                this.weightMin,
+                Number(
+                    config.weightMax
+                ) ||
+                this.weightMin
+            );
+
+        this.description =
+            config.description ||
+            "";
+
+    }
+
+}
+
+
+//================================================
+// FISHING SPOT CLASS
+//================================================
+
+class FishingSpotV20 {
+
+    constructor(
+        id,
+        config = {}
+    ) {
+
+        this.id =
+            id;
+
+        this.name =
+            config.name ||
+            "Fishing Spot";
+
+        this.x =
+            Number(
+                config.x
+            ) || 0;
+
+        this.y =
+            Number(
+                config.y
+            ) || 0;
+
+        this.radius =
+            Math.max(
+                20,
+                Number(
+                    config.radius
+                ) || 100
+            );
+
+        this.type =
+            config.type ||
+            FishTypeV20.FRESHWATER;
+
+        this.requiredLevel =
+            Math.max(
+                1,
+                Number(
+                    config.requiredLevel
+                ) || 1
+            );
+
+        this.fishTable =
+            Array.isArray(
+                config.fishTable
+            )
+                ? [
+                    ...config.fishTable
+                ]
+                : [];
+
+        this.maxFish =
+            Math.max(
+                1,
+                Number(
+                    config.maxFish
+                ) || 20
+            );
+
+        this.fishLeft =
+            Number.isFinite(
+                Number(
+                    config.fishLeft
+                )
+            )
+                ? Math.max(
+                    0,
+                    Number(
+                        config.fishLeft
+                    )
+                )
+                : this.maxFish;
+
+        this.depleted =
+            this.fishLeft <= 0;
+
+        this.respawnAt =
+            Number(
+                config.respawnAt
+            ) || 0;
+
+        this.respawnTime =
+            Math.max(
+                1000,
+                Number(
+                    config.respawnTime
+                ) ||
+                FishingSystemV20
+                    .config
+                    .defaultRespawn
+            );
+
+    }
+
+}
+
+
+//================================================
+// REGISTER FISH
+//================================================
+
+function registerFishV20(
+    config
+) {
+
+    const fish =
+        config instanceof
+        FishItemV20
+            ? config
+            : new FishItemV20(
+                config
+            );
+
+    FishingSystemV20
+        .fishDatabase
+        .set(
+            fish.id,
+            fish
+        );
+
+    return fish;
+
+}
+
+
+//================================================
+// GET FISH
+//================================================
+
+function getFishV20(
+    fishId
+) {
+
+    return (
+        FishingSystemV20
+            .fishDatabase
+            .get(
+                fishId
+            ) || null
+    );
+
+}
+
+
+//================================================
+// REGISTER SPOT
+//================================================
+
+function registerFishingSpotV20(
+    config
+) {
+
+    if (
+        !config ||
+        !config.id
+    ) {
+
+        return null;
+
+    }
+
+    const spot =
+        config instanceof
+        FishingSpotV20
+            ? config
+            : new FishingSpotV20(
+                config.id,
+                config
+            );
+
+    FishingSystemV20
+        .fishingSpots
+        .set(
+            spot.id,
+            spot
+        );
+
+    return spot;
+
+}
+
+
+//================================================
+// GET SPOT
+//================================================
+
+function getFishingSpotV20(
+    spotId
+) {
+
+    return (
+        FishingSystemV20
+            .fishingSpots
+            .get(
+                spotId
+            ) || null
+    );
+
+}
+
+
+//================================================
+// PLAYER FISHING LEVEL
+//================================================
+
+function getFishingLevelV20() {
+
+    const player =
+        typeof getPlayerSkillCaster ===
+        "function"
+            ? getPlayerSkillCaster()
+            : null;
+
+    if (!player)
+        return 1;
+
+    return Math.max(
+        1,
+        Number(
+            player.fishingLevel
+        ) ||
+        Number(
+            player.gatheringLevel
+        ) ||
+        Number(
+            player.level
+        ) ||
+        1
+    );
+
+}
+
+
+//================================================
+// PLAYER FISHING LUCK
+//================================================
+
+function getFishingLuckV20() {
+
+    const player =
+        typeof getPlayerSkillCaster ===
+        "function"
+            ? getPlayerSkillCaster()
+            : null;
+
+    if (!player)
+        return 0;
+
+    return Math.max(
+        0,
+        Number(
+            player.fishingLuck
+        ) ||
+        Number(
+            player.luck
+        ) ||
+        0
+    );
+
+}
+
+
+//================================================
+// PLAYER FISHING SPEED
+//================================================
+
+function getFishingSpeedV20() {
+
+    const player =
+        typeof getPlayerSkillCaster ===
+        "function"
+            ? getPlayerSkillCaster()
+            : null;
+
+    if (!player)
+        return 0;
+
+    return Math.max(
+        0,
+        Number(
+            player.fishingSpeed
+        ) || 0
+    );
+
+}
+
+
+//================================================
+// CHECK FISHING ROD
+//================================================
+
+function hasFishingRodV20() {
+
+    if (
+        typeof getInventoryItemCountV9 !==
+        "function"
+    ) {
+
+        return true;
+
+    }
+
+    const rods = [
+
+        "fishing_rod",
+        "wooden_fishing_rod",
+        "iron_fishing_rod",
+        "golden_fishing_rod",
+        "mythic_fishing_rod"
+
+    ];
+
+    for (
+        const rod of
+        rods
+    ) {
+
+        if (
+            getInventoryItemCountV9(
+                rod
+            ) > 0
+        ) {
+
+            return true;
+
+        }
+
+    }
+
+    return false;
+
+}
+
+
+//================================================
+// UPDATE SPOT
+//================================================
+
+function updateFishingSpotV20(
+    spot
+) {
+
+    if (!spot)
+        return null;
+
+    if (
+        !spot.depleted
+    ) {
+
+        return spot;
+
+    }
+
+    if (
+        Date.now() >=
+        spot.respawnAt
+    ) {
+
+        spot.fishLeft =
+            spot.maxFish;
+
+        spot.depleted =
+            false;
+
+        spot.respawnAt =
+            0;
+
+    }
+
+    return spot;
+
+}
+
+
+//================================================
+// SELECT FISH
+//================================================
+
+function selectFishV20(
+    spot
+) {
+
+    if (!spot)
+        return null;
+
+    const level =
+        getFishingLevelV20();
+
+    const luck =
+        getFishingLuckV20();
+
+    const candidates = [];
+
+    for (
+        const entry of
+        spot.fishTable
+    ) {
+
+        const fish =
+            getFishV20(
+                entry.id
+            );
+
+        if (!fish)
+            continue;
+
+        if (
+            level <
+            fish.requiredLevel
+        ) {
+
+            continue;
+
+        }
+
+        let weight =
+            Math.max(
+                0,
+                Number(
+                    entry.weight
+                ) || 1
+            );
+
+        if (
+            fish.rarity !==
+            FishRarityV20.COMMON
+        ) {
+
+            weight *=
+                1 +
+                luck *
+                FishingSystemV20
+                    .config
+                    .rareBonusPerLuck;
+
+        }
+
+        candidates.push({
+
+            fish,
+
+            weight
+
+        });
+
+    }
+
+    if (
+        !candidates.length
+    ) {
+
+        return null;
+
+    }
+
+    const totalWeight =
+        candidates.reduce(
+            (
+                sum,
+                entry
+            ) =>
+                sum +
+                entry.weight,
+            0
+        );
+
+    let roll =
+        Math.random() *
+        totalWeight;
+
+    for (
+        const entry of
+        candidates
+    ) {
+
+        roll -=
+            entry.weight;
+
+        if (
+            roll <= 0
+        ) {
+
+            return entry.fish;
+
+        }
+
+    }
+
+    return candidates[
+        candidates.length - 1
+    ].fish;
+
+}
+
+
+//================================================
+// RANDOM BITE DELAY
+//================================================
+
+function getFishingBiteDelayV20() {
+
+    const speed =
+        getFishingSpeedV20();
+
+    const min =
+        FishingSystemV20
+            .config
+            .baseBiteDelayMin;
+
+    const max =
+        FishingSystemV20
+            .config
+            .baseBiteDelayMax;
+
+    const base =
+        min +
+        Math.random() *
+        (
+            max -
+            min
+        );
+
+    return Math.max(
+        400,
+        base *
+        (
+            1 -
+            Math.min(
+                0.6,
+                speed *
+                0.01
+            )
+        )
+    );
+
+}
+
+
+//================================================
+// CAST LINE
+//================================================
+
+function startFishingV20(
+    spotId
+) {
+
+    const spot =
+        getFishingSpotV20(
+            spotId
+        );
+
+    if (!spot) {
+
+        FishingSystemV20
+            .statistics
+            .failed++;
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "spot_not_found"
+
+        };
+
+    }
+
+    updateFishingSpotV20(
+        spot
+    );
+
+    if (
+        spot.depleted
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "spot_depleted",
+
+            respawnAt:
+                spot.respawnAt
+
+        };
+
+    }
+
+    if (
+        getFishingLevelV20() <
+        spot.requiredLevel
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "level_too_low"
+
+        };
+
+    }
+
+    if (
+        !hasFishingRodV20()
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "rod_missing"
+
+        };
+
+    }
+
+    if (
+        FishingSystemV20
+            .activeSessions
+            .has(
+                spotId
+            )
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "already_fishing"
+
+        };
+
+    }
+
+    const fish =
+        selectFishV20(
+            spot
+        );
+
+    if (!fish) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "no_available_fish"
+
+        };
+
+    }
+
+    const now =
+        Date.now();
+
+    const biteDelay =
+        getFishingBiteDelayV20();
+
+    const session = {
+
+        spotId,
+
+        fishId:
+            fish.id,
+
+        state:
+            "waiting",
+
+        startedAt:
+            now,
+
+        biteAt:
+            now +
+            biteDelay,
+
+        catchDeadline:
+            0,
+
+        biteDelay,
+
+        caught:
+            false,
+
+        perfect:
+            false
+
+    };
+
+    FishingSystemV20
+        .activeSessions
+        .set(
+            spotId,
+            session
+        );
+
+    FishingSystemV20
+        .statistics
+        .casts++;
+
+    return {
+
+        success:
+            true,
+
+        spotId,
+
+        state:
+            session.state,
+
+        biteAt:
+            session.biteAt
+
+    };
+
+}
+
+
+//================================================
+// UPDATE FISHING SESSION
+//================================================
+
+function updateFishingV20(
+    spotId
+) {
+
+    const session =
+        FishingSystemV20
+            .activeSessions
+            .get(
+                spotId
+            );
+
+    if (!session)
+        return null;
+
+    const now =
+        Date.now();
+
+    if (
+        session.state ===
+        "waiting"
+    ) {
+
+        if (
+            now >=
+            session.biteAt
+        ) {
+
+            session.state =
+                "biting";
+
+            session.biteStartedAt =
+                now;
+
+            session.catchDeadline =
+                now +
+                FishingSystemV20
+                    .config
+                    .catchWindow;
+
+        }
+
+    }
+
+    if (
+        session.state ===
+        "biting"
+    ) {
+
+        if (
+            now >
+            session.catchDeadline
+        ) {
+
+            session.state =
+                "failed";
+
+            FishingSystemV20
+                .statistics
+                .failed++;
+
+        }
+
+    }
+
+    return {
+
+        ...session,
+
+        remaining:
+            session.state ===
+            "waiting"
+                ? Math.max(
+                    0,
+                    session.biteAt -
+                    now
+                )
+                : session.state ===
+                  "biting"
+                    ? Math.max(
+                        0,
+                        session.catchDeadline -
+                        now
+                    )
+                    : 0
+
+    };
+
+}
+
+
+//================================================
+// HOOK FISH
+//================================================
+
+function hookFishV20(
+    spotId
+) {
+
+    const session =
+        FishingSystemV20
+            .activeSessions
+            .get(
+                spotId
+            );
+
+    if (!session) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "no_active_session"
+
+        };
+
+    }
+
+    updateFishingV20(
+        spotId
+    );
+
+    if (
+        session.state !==
+        "biting"
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                session.state ===
+                "waiting"
+                    ? "fish_not_biting"
+                    : "fish_escaped"
+
+        };
+
+    }
+
+    const reactionTime =
+        Date.now() -
+        session.biteStartedAt;
+
+    session.perfect =
+        reactionTime <=
+        FishingSystemV20
+            .config
+            .perfectWindow;
+
+    session.state =
+        "hooked";
+
+    session.caught =
+        true;
+
+    return {
+
+        success:
+            true,
+
+        perfect:
+            session.perfect,
+
+        reactionTime
+
+    };
+
+}
+
+
+//================================================
+// COMPLETE CATCH
+//================================================
+
+function completeFishingV20(
+    spotId
+) {
+
+    const session =
+        FishingSystemV20
+            .activeSessions
+            .get(
+                spotId
+            );
+
+    if (!session) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "no_active_session"
+
+        };
+
+    }
+
+    updateFishingV20(
+        spotId
+    );
+
+    if (
+        session.state ===
+        "failed"
+    ) {
+
+        FishingSystemV20
+            .activeSessions
+            .delete(
+                spotId
+            );
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "fish_escaped"
+
+        };
+
+    }
+
+    if (
+        !session.caught ||
+        session.state !==
+        "hooked"
+    ) {
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "fish_not_hooked"
+
+        };
+
+    }
+
+    const fish =
+        getFishV20(
+            session.fishId
+        );
+
+    const spot =
+        getFishingSpotV20(
+            spotId
+        );
+
+    FishingSystemV20
+        .activeSessions
+        .delete(
+            spotId
+        );
+
+    if (
+        !fish ||
+        !spot
+    ) {
+
+        FishingSystemV20
+            .statistics
+            .failed++;
+
+        return {
+
+            success:
+                false,
+
+            reason:
+                "catch_data_missing"
+
+        };
+
+    }
+
+    let amount =
+        fish.minAmount +
+        Math.floor(
+            Math.random() *
+            (
+                fish.maxAmount -
+                fish.minAmount +
+                1
+            )
+        );
+
+    if (
+        session.perfect
+    ) {
+
+        amount++;
+
+        FishingSystemV20
+            .statistics
+            .perfectCatches++;
+
+    }
+
+    const weight =
+        fish.weightMin +
+        Math.random() *
+        (
+            fish.weightMax -
+            fish.weightMin
+        );
+
+    const roundedWeight =
+        Math.round(
+            weight *
+            100
+        ) / 100;
+
+    if (
+        typeof addInventoryItemV9 ===
+        "function"
+    ) {
+
+        addInventoryItemV9(
+            fish.id,
+            amount
+        );
+
+    }
+
+    const player =
+        typeof getPlayerSkillCaster ===
+        "function"
+            ? getPlayerSkillCaster()
+            : null;
+
+    const gainedExp =
+        session.perfect
+            ? Math.floor(
+                fish.exp *
+                1.5
+            )
+            : fish.exp;
+
+    if (player) {
+
+        if (
+            typeof player.exp ===
+            "number"
+        ) {
+
+            player.exp +=
+                gainedExp;
+
+        }
+
+        if (
+            typeof player.experience ===
+            "number"
+        ) {
+
+            player.experience +=
+                gainedExp;
+
+        }
+
+    }
+
+    spot.fishLeft =
+        Math.max(
+            0,
+            spot.fishLeft -
+            1
+        );
+
+    if (
+        spot.fishLeft <= 0
+    ) {
+
+        spot.depleted =
+            true;
+
+        spot.respawnAt =
+            Date.now() +
+            spot.respawnTime;
+
+    }
+
+    FishingSystemV20
+        .statistics
+        .catches++;
+
+    FishingSystemV20
+        .statistics
+        .totalValue +=
+        fish.value *
+        amount;
+
+    if (
+        fish.rarity !==
+        FishRarityV20.COMMON
+    ) {
+
+        FishingSystemV20
+            .statistics
+            .rareCatches++;
+
+    }
+
+    return {
+
+        success:
+            true,
+
+        fishId:
+            fish.id,
+
+        fishName:
+            fish.name,
+
+        rarity:
+            fish.rarity,
+
+        amount,
+
+        weight:
+            roundedWeight,
+
+        perfect:
+            session.perfect,
+
+        exp:
+            gainedExp,
+
+        value:
+            fish.value *
+            amount,
+
+        fishLeft:
+            spot.fishLeft,
+
+        depleted:
+            spot.depleted,
+
+        respawnAt:
+            spot.respawnAt
+
+    };
+
+}
+
+
+//================================================
+// CANCEL FISHING
+//================================================
+
+function cancelFishingV20(
+    spotId
+) {
+
+    if (
+        !FishingSystemV20
+            .activeSessions
+            .has(
+                spotId
+            )
+    ) {
+
+        return false;
+
+    }
+
+    FishingSystemV20
+        .activeSessions
+        .delete(
+            spotId
+        );
+
+    return true;
+
+}
+
+
+//================================================
+// FIND NEAREST SPOT
+//================================================
+
+function findNearestFishingSpotV20(
+    x,
+    y,
+    maxDistance = 180
+) {
+
+    let nearest =
+        null;
+
+    let nearestDistance =
+        Infinity;
+
+    for (
+        const spot of
+        FishingSystemV20
+            .fishingSpots
+            .values()
+    ) {
+
+        updateFishingSpotV20(
+            spot
+        );
+
+        if (
+            spot.depleted
+        )
+            continue;
+
+        const dx =
+            spot.x -
+            x;
+
+        const dy =
+            spot.y -
+            y;
+
+        const distance =
+            Math.sqrt(
+                dx * dx +
+                dy * dy
+            );
+
+        if (
+            distance <=
+            maxDistance &&
+            distance <
+            nearestDistance
+        ) {
+
+            nearest =
+                spot;
+
+            nearestDistance =
+                distance;
+
+        }
+
+    }
+
+    return nearest;
+
+}
+
+
+//================================================
+// DEFAULT FISH
+//================================================
+
+registerFishV20({
+
+    id:
+        "small_carp",
+
+    name:
+        "Small Carp",
+
+    type:
+        FishTypeV20.RIVER,
+
+    rarity:
+        FishRarityV20.COMMON,
+
+    minAmount:
+        1,
+
+    maxAmount:
+        2,
+
+    value:
+        12,
+
+    exp:
+        8,
+
+    weightMin:
+        0.2,
+
+    weightMax:
+        1.2
+
+});
+
+
+registerFishV20({
+
+    id:
+        "river_trout",
+
+    name:
+        "River Trout",
+
+    type:
+        FishTypeV20.RIVER,
+
+    rarity:
+        FishRarityV20.UNCOMMON,
+
+    requiredLevel:
+        8,
+
+    value:
+        45,
+
+    exp:
+        18,
+
+    weightMin:
+        0.8,
+
+    weightMax:
+        3.5
+
+});
+
+
+registerFishV20({
+
+    id:
+        "golden_koi",
+
+    name:
+        "Golden Koi",
+
+    type:
+        FishTypeV20.LAKE,
+
+    rarity:
+        FishRarityV20.RARE,
+
+    requiredLevel:
+        20,
+
+    value:
+        220,
+
+    exp:
+        60,
+
+    weightMin:
+        1,
+
+    weightMax:
+        8
+
+});
+
+
+registerFishV20({
+
+    id:
+        "crystal_fish",
+
+    name:
+        "Crystal Fish",
+
+    type:
+        FishTypeV20.MAGICAL,
+
+    rarity:
+        FishRarityV20.EPIC,
+
+    requiredLevel:
+        35,
+
+    value:
+        800,
+
+    exp:
+        160,
+
+    weightMin:
+        0.5,
+
+    weightMax:
+        4
+
+});
+
+
+registerFishV20({
+
+    id:
+        "storm_serpent",
+
+    name:
+        "Storm Serpent",
+
+    type:
+        FishTypeV20.MAGICAL,
+
+    rarity:
+        FishRarityV20.LEGENDARY,
+
+    requiredLevel:
+        50,
+
+    value:
+        5000,
+
+    exp:
+        600,
+
+    weightMin:
+        5,
+
+    weightMax:
+        30
+
+});
+
+
+registerFishV20({
+
+    id:
+        "celestial_leviathan",
+
+    name:
+        "Celestial Leviathan",
+
+    type:
+        FishTypeV20.MAGICAL,
+
+    rarity:
+        FishRarityV20.MYTHIC,
+
+    requiredLevel:
+        70,
+
+    value:
+        50000,
+
+    exp:
+        3000,
+
+    weightMin:
+        50,
+
+    weightMax:
+        250
+
+});
+
+
+//================================================
+// DEFAULT FISHING SPOTS
+//================================================
+
+registerFishingSpotV20({
+
+    id:
+        "river_spot_01",
+
+    name:
+        "Whispering River",
+
+    x:
+        650,
+
+    y:
+        900,
+
+    radius:
+        160,
+
+    type:
+        FishTypeV20.RIVER,
+
+    maxFish:
+        30,
+
+    fishTable:
+        [
+
+            {
+                id:
+                    "small_carp",
+
+                weight:
+                    75
+
+            },
+
+            {
+                id:
+                    "river_trout",
+
+                weight:
+                    25
+
+            }
+
+        ]
+
+});
+
+
+registerFishingSpotV20({
+
+    id:
+        "lake_spot_01",
+
+    name:
+        "Moon Lake",
+
+    x:
+        2200,
+
+    y:
+        1500,
+
+    radius:
+        220,
+
+    type:
+        FishTypeV20.LAKE,
+
+    requiredLevel:
+        10,
+
+    maxFish:
+        25,
+
+    respawnTime:
+        120000,
+
+    fishTable:
+        [
+
+            {
+                id:
+                    "small_carp",
+
+                weight:
+                    30
+
+            },
+
+            {
+                id:
+                    "river_trout",
+
+                weight:
+                    45
+
+            },
+
+            {
+                id:
+                    "golden_koi",
+
+                weight:
+                    25
+
+            }
+
+        ]
+
+});
+
+
+registerFishingSpotV20({
+
+    id:
+        "crystal_lake_01",
+
+    name:
+        "Crystal Lake",
+
+    x:
+        3600,
+
+    y:
+        2600,
+
+    radius:
+        250,
+
+    type:
+        FishTypeV20.MAGICAL,
+
+    requiredLevel:
+        35,
+
+    maxFish:
+        20,
+
+    respawnTime:
+        180000,
+
+    fishTable:
+        [
+
+            {
+                id:
+                    "golden_koi",
+
+                weight:
+                    40
+
+            },
+
+            {
+                id:
+                    "crystal_fish",
+
+                weight:
+                    55
+
+            },
+
+            {
+                id:
+                    "storm_serpent",
+
+                weight:
+                    5
+
+            }
+
+        ]
+
+});
+
+
+registerFishingSpotV20({
+
+    id:
+        "celestial_sea_01",
+
+    name:
+        "Celestial Sea",
+
+    x:
+        6200,
+
+    y:
+        4200,
+
+    radius:
+        400,
+
+    type:
+        FishTypeV20.MAGICAL,
+
+    requiredLevel:
+        65,
+
+    maxFish:
+        12,
+
+    respawnTime:
+        600000,
+
+    fishTable:
+        [
+
+            {
+                id:
+                    "crystal_fish",
+
+                weight:
+                    40
+
+            },
+
+            {
+                id:
+                    "storm_serpent",
+
+                weight:
+                    45
+
+            },
+
+            {
+                id:
+                    "celestial_leviathan",
+
+                weight:
+                    15
+
+            }
+
+        ]
+
+});
+
+
+//================================================
+// UPDATE ALL SPOTS
+//================================================
+
+function updateAllFishingSpotsV20() {
+
+    for (
+        const spot of
+        FishingSystemV20
+            .fishingSpots
+            .values()
+    ) {
+
+        updateFishingSpotV20(
+            spot
+        );
+
+    }
+
+}
+
+
+//================================================
+// SAVE DATA
+//================================================
+
+function getFishingSaveDataV20() {
+
+    return {
+
+        statistics:
+            {
+                ...FishingSystemV20
+                    .statistics
+            },
+
+        spots:
+            Array.from(
+                FishingSystemV20
+                    .fishingSpots
+                    .values()
+            ).map(
+                spot => ({
+
+                    id:
+                        spot.id,
+
+                    fishLeft:
+                        spot.fishLeft,
+
+                    maxFish:
+                        spot.maxFish,
+
+                    depleted:
+                        spot.depleted,
+
+                    respawnAt:
+                        spot.respawnAt
+
+                })
+            )
+
+    };
+
+}
+
+
+//================================================
+// LOAD DATA
+//================================================
+
+function loadFishingSaveDataV20(
+    data
+) {
+
+    if (!data)
+        return;
+
+    if (
+        data.statistics
+    ) {
+
+        FishingSystemV20
+            .statistics =
+            {
+
+                ...FishingSystemV20
+                    .statistics,
+
+                ...data.statistics
+
+            };
+
+    }
+
+    if (
+        Array.isArray(
+            data.spots
+        )
+    ) {
+
+        for (
+            const saved of
+            data.spots
+        ) {
+
+            const spot =
+                getFishingSpotV20(
+                    saved.id
+                );
+
+            if (!spot)
+                continue;
+
+            spot.fishLeft =
+                Math.max(
+                    0,
+                    Number(
+                        saved.fishLeft
+                    )
+                );
+
+            spot.maxFish =
+                Number(
+                    saved.maxFish
+                ) ||
+                spot.maxFish;
+
+            spot.depleted =
+                Boolean(
+                    saved.depleted
+                );
+
+            spot.respawnAt =
+                Number(
+                    saved.respawnAt
+                ) || 0;
+
+        }
+
+    }
+
+    updateAllFishingSpotsV20();
+
+}
+
+
+//================================================
+// EXPORT
+//================================================
+
+if (
+    typeof window !==
+    "undefined"
+) {
+
+    window.FishingSystemV20 =
+        FishingSystemV20;
+
+    window.FishRarityV20 =
+        FishRarityV20;
+
+    window.FishTypeV20 =
+        FishTypeV20;
+
+    window.FishItemV20 =
+        FishItemV20;
+
+    window.FishingSpotV20 =
+        FishingSpotV20;
+
+    window.registerFishV20 =
+        registerFishV20;
+
+    window.getFishV20 =
+        getFishV20;
+
+    window.registerFishingSpotV20 =
+        registerFishingSpotV20;
+
+    window.getFishingSpotV20 =
+        getFishingSpotV20;
+
+    window.getFishingLevelV20 =
+        getFishingLevelV20;
+
+    window.getFishingLuckV20 =
+        getFishingLuckV20;
+
+    window.startFishingV20 =
+        startFishingV20;
+
+    window.updateFishingV20 =
+        updateFishingV20;
+
+    window.hookFishV20 =
+        hookFishV20;
+
+    window.completeFishingV20 =
+        completeFishingV20;
+
+    window.cancelFishingV20 =
+        cancelFishingV20;
+
+    window.findNearestFishingSpotV20 =
+        findNearestFishingSpotV20;
+
+    window.updateFishingSpotV20 =
+        updateFishingSpotV20;
+
+    window.updateAllFishingSpotsV20 =
+        updateAllFishingSpotsV20;
+
+    window.getFishingSaveDataV20 =
+        getFishingSaveDataV20;
+
+    window.loadFishingSaveDataV20 =
+        loadFishingSaveDataV20;
+
+}
+
+
+//================================================
+// AUTO UPDATE
+//================================================
+
+if (
+    typeof setInterval ===
+    "function"
+) {
+
+    setInterval(
+        () => {
+
+            if (
+                !FishingSystemV20
+                    .enabled
+            ) {
+
+                return;
+
+            }
+
+            updateAllFishingSpotsV20();
+
+            for (
+                const spotId of
+                FishingSystemV20
+                    .activeSessions
+                    .keys()
+            ) {
+
+                updateFishingV20(
+                    spotId
+                );
+
+            }
+
+        },
+        150
+    );
+
+}
+
+
+//================================================
+// END FISHING SYSTEM V20
+//================================================
